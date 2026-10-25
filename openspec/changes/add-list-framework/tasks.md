@@ -17,12 +17,12 @@
 
 ## 2. easylist-sql-goqu
 
-- [ ] 2.1 Remove `schema.go`, `identifier.go` truncation, `internal/pgident`, `Convert`/`Compiler`, `cmd/query2sql`, their tests, and the `pg_query_go` requirement; rename the package to `sqlgoqu`, require `easylist-core`, and verify `go mod tidy` drops `pg_query_go` and `go build ./...` succeeds
-- [ ] 2.2 Adapt predicate building and lowering to plan fields (expression from field SQL or `alias."column"`, type from the field) and add timestamp, uuid, and enum literal handling while dropping arrays; verify with ported predicate tests plus new cases for every `contract-sql-driver` operator and literal scenario
-- [ ] 2.3 Implement page and export query compilation (trusted FROM literal with ordered joins, aliased selected fields, parenthesized scope ANDed with the filter, ordering, prepared limit/offset); verify with golden SQL and argument tests covering `sql-goqu-compilation` page scenarios, placeholder order, and determinism
-- [ ] 2.4 Implement count query compilation; verify with golden tests that count SQL has only filter joins and no ordering or pagination
-- [ ] 2.5 Add a concurrency test compiling many plans in parallel with one driver value and verify it passes under `go test -race ./...`
-- [ ] 2.6 Rewrite `easylist-sql-goqu/README.md` for driver usage (constructing the driver, plugging it into `easylist.Runtime`, PostgreSQL semantics such as `<>` and `ILIKE`), removing the CLI and `CREATE TABLE` sections; verify every Go snippet compiles via an example test
+- [x] 2.1 Remove `schema.go`, `identifier.go` truncation, `internal/pgident`, `Convert`/`Compiler`, `cmd/query2sql`, their tests, and the `pg_query_go` requirement; rename the package to `sqlgoqu`, require `easylist-core`, and verify `go mod tidy` drops `pg_query_go` and `go build ./...` succeeds
+- [x] 2.2 Adapt predicate building and lowering to plan fields (expression from field SQL or `alias."column"`, type from the field) and add timestamp, uuid, and enum literal handling while dropping arrays; verify with ported predicate tests plus new cases for every `contract-sql-driver` operator and literal scenario
+- [x] 2.3 Implement page and export query compilation (trusted FROM literal with ordered joins, aliased selected fields, parenthesized scope ANDed with the filter, ordering, prepared limit/offset); verify with golden SQL and argument tests covering `sql-goqu-compilation` page scenarios, placeholder order, and determinism
+- [x] 2.4 Implement count query compilation; verify with golden tests that count SQL has only filter joins and no ordering or pagination
+- [x] 2.5 Add a concurrency test compiling many plans in parallel with one driver value and verify it passes under `go test -race ./...`
+- [x] 2.6 Rewrite `easylist-sql-goqu/README.md` for driver usage (constructing the driver, plugging it into `easylist.Runtime`, PostgreSQL semantics such as `<>` and `ILIKE`), removing the CLI and `CREATE TABLE` sections; verify every Go snippet compiles via an example test
 
 ## 3. easylist-gqlgen
 

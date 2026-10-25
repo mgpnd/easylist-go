@@ -1,8 +1,9 @@
-package querysql
+package sqlgoqu
 
 import (
 	"fmt"
 
+	easylist "github.com/mgpnd/easylist-go/easylist-core"
 	filter "github.com/mgpnd/easylist-go/easylist-filter"
 
 	"github.com/doug-martin/goqu/v9"
@@ -11,7 +12,7 @@ import (
 
 // lowerFilter walks the public syntax tree in postorder without recursion.
 // Visiting left children first preserves validation and prepared argument order.
-func lowerFilter(table tableMeta, root filter.Expr) (exp.Expression, error) {
+func lowerFilter(p *easylist.Plan, root filter.Expr) (exp.Expression, error) {
 	if root == nil {
 		return nil, fmt.Errorf("empty filter syntax tree")
 	}
@@ -26,7 +27,7 @@ func lowerFilter(table tableMeta, root filter.Expr) (exp.Expression, error) {
 		frames = frames[:len(frames)-1]
 		switch node := current.node.(type) {
 		case filter.Predicate:
-			predicate, err := buildPredicate(table, node)
+			predicate, err := buildPredicate(p, node)
 			if err != nil {
 				return nil, err
 			}
