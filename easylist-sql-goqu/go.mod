@@ -1,4 +1,4 @@
-module github.com/mgpnd/easylist-sql-goqu
+module github.com/mgpnd/easylist-go/easylist-sql-goqu
 
 go 1.25.0
 

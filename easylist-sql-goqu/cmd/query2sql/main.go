@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	querysql "github.com/mgpnd/easylist-sql-goqu"
+	querysql "github.com/mgpnd/easylist-go/easylist-sql-goqu"
 )
 
 func main() {

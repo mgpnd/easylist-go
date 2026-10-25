@@ -1,28 +1,19 @@
 # easylist-sql-goqu
 
-`easylist-sql-goqu` turns a filter expression into a prepared PostgreSQL `SELECT` query. It parses the filter with [easylist-filter](https://github.com/mgpnd/easylist-filter), reads table and column definitions from a SQL schema, checks the filter against them, and uses [goqu](https://github.com/doug-martin/goqu) to produce SQL with bound arguments. It generates queries; it does not connect to or query a database.
+`easylist-sql-goqu` turns a filter expression into a prepared PostgreSQL `SELECT` query. It parses the filter with [easylist-filter](../easylist-filter), reads table and column definitions from a SQL schema, checks the filter against them, and uses [goqu](https://github.com/doug-martin/goqu) to produce SQL with bound arguments. It generates queries; it does not connect to or query a database.
 
 ## Packages
 
 - **Root package (`querysql`):** exposes `Convert` for a single conversion and `NewCompiler` / `Compiler.Compile` for reusing parsed schema metadata. Use `Compiler.CompileAST` to compile an AST from `filter.Parse`. Its schema reader uses `pg_query_go`; schema validation and literal conversion happen before goqu renders the SQL.
 - **`cmd/query2sql` command:** reads a schema file and filter from command-line arguments, then prints a JSON object containing `sql` and `args`.
 
-The filter syntax is described in [easylist-filter's query language doc](https://github.com/mgpnd/easylist-filter/blob/main/docs/query-language.md). Unit tests live alongside the package and command source files.
+The filter syntax is described in [easylist-filter's query language doc](../easylist-filter/docs/query-language.md). Unit tests live alongside the package and command source files.
 
 ## Local development
 
-`easylist-filter` is not published yet, so this module builds only inside the Go workspace that contains both repositories. Check out `easylist-filter` and `easylist-sql-goqu` side by side, with this `go.work` in their parent directory:
+`easylist-filter` is not published yet, so this module builds only inside the [easylist-go](https://github.com/mgpnd/easylist-go) repository, whose root `go.work` links both modules. Clone that repository and work from it.
 
-```
-go 1.25.0
-
-use (
-	./easylist-filter
-	./easylist-sql-goqu
-)
-```
-
-After `easylist-filter` is tagged, add the requirement with `go get github.com/mgpnd/easylist-filter@<version>`.
+After `easylist-filter` is tagged as `easylist-filter/v<version>`, add the requirement with `go get github.com/mgpnd/easylist-go/easylist-filter@v<version>`.
 
 ## Run locally
 
@@ -41,8 +32,8 @@ Use the two modules separately when you want to inspect or reuse a filter:
 
 ```go
 import (
-    filter "github.com/mgpnd/easylist-filter"
-    querysql "github.com/mgpnd/easylist-sql-goqu"
+    filter "github.com/mgpnd/easylist-go/easylist-filter"
+    querysql "github.com/mgpnd/easylist-go/easylist-sql-goqu"
 )
 
 func compileUsers() (string, []any, error) {

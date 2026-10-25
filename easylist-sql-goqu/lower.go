@@ -3,7 +3,7 @@ package querysql
 import (
 	"fmt"
 
-	filter "github.com/mgpnd/easylist-filter"
+	filter "github.com/mgpnd/easylist-go/easylist-filter"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"

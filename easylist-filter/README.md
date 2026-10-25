@@ -1,6 +1,6 @@
 # easylist-filter
 
-`easylist-filter` parses a user-facing filter expression such as `name = 'Artem' AND age < 30` into an immutable, inspectable AST. It has no schema, SQL, or third-party dependencies. To turn the AST into a prepared PostgreSQL query, use [easylist-sql-goqu](https://github.com/mgpnd/easylist-sql-goqu).
+`easylist-filter` parses a user-facing filter expression such as `name = 'Artem' AND age < 30` into an immutable, inspectable AST. It has no schema, SQL, or third-party dependencies. To turn the AST into a prepared PostgreSQL query, use [easylist-sql-goqu](../easylist-sql-goqu).
 
 ## Package
 
@@ -11,7 +11,7 @@ The filter syntax is described in [docs/query-language.md](docs/query-language.m
 ## Parse a filter
 
 ```go
-import filter "github.com/mgpnd/easylist-filter"
+import filter "github.com/mgpnd/easylist-go/easylist-filter"
 
 func fields(input string) ([]string, error) {
     expr, err := filter.Parse(input)

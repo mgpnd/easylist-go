@@ -3,7 +3,7 @@ package querysql
 import (
 	"strings"
 
-	"github.com/mgpnd/easylist-sql-goqu/internal/pgident"
+	"github.com/mgpnd/easylist-go/easylist-sql-goqu/internal/pgident"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"

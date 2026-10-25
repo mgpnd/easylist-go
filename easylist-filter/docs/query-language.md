@@ -47,7 +47,7 @@ nonempty trimmed bounds, for example `age BETWEEN '30,40'`. It does not
 accept SQL-style `BETWEEN 30 AND 40`. Column existence, allowed operators,
 value types, and the conversion of `BETWEEN` bounds are semantic checks
 that a compiler such as
-[easylist-sql-goqu](https://github.com/mgpnd/easylist-sql-goqu) performs
+[easylist-sql-goqu](../../easylist-sql-goqu) performs
 against the selected table's schema.
 
 The AST retains decoded strings, exact numeric spelling, literal kinds, and

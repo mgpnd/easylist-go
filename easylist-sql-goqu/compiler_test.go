@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	filter "github.com/mgpnd/easylist-filter"
+	filter "github.com/mgpnd/easylist-go/easylist-filter"
 )
 
 func TestCompilePreparedSQL(t *testing.T) {
