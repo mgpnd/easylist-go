@@ -37,11 +37,11 @@
 
 ## 4. easylist-export
 
-- [ ] 4.1 Create the `easylist-export` module (package `easylistexport`) requiring `easylist-core` and excelize, add it to `go.work`, and verify `go build ./...` succeeds
-- [ ] 4.2 Implement `Run` (revalidation, export plan, single streaming query, per-row calculated evaluation, encoder dispatch, stop on first error or context cancellation); verify with tests against a fake `Queryer` that count queries, assert one query runs, and assert rows are written before the fake finishes producing them
-- [ ] 4.3 Implement the CSV encoder per `export-file-generation` (header titles, RFC 4180 quoting, NULL as empty, per-type formatting); verify with golden CSV tests
-- [ ] 4.4 Implement the XLSX encoder with excelize `StreamWriter` (sheet named after the list, text cells for strings and exact numerics, number cells within ±2^53, date, boolean, and empty cells); verify by reading the produced workbook back with excelize in tests, including a formula-like string
-- [ ] 4.5 Write `easylist-export/README.md` showing an application worker that decodes an `ExportRequest`, calls `Run`, and stores the file, and naming the CSV formula risk; verify every Go snippet compiles via an example test
+- [x] 4.1 Create the `easylist-export` module (package `easylistexport`) requiring `easylist-core` and excelize, add it to `go.work`, and verify `go build ./...` succeeds
+- [x] 4.2 Implement `Run` (revalidation, export plan, single streaming query, per-row calculated evaluation, encoder dispatch, stop on first error or context cancellation); verify with tests against a fake `Queryer` that count queries, assert one query runs, and assert rows are written before the fake finishes producing them
+- [x] 4.3 Implement the CSV encoder per `export-file-generation` (header titles, RFC 4180 quoting, NULL as empty, per-type formatting); verify with golden CSV tests
+- [x] 4.4 Implement the XLSX encoder with excelize `StreamWriter` (sheet named after the list, text cells for strings and exact numerics, number cells within ±2^53, date, boolean, and empty cells); verify by reading the produced workbook back with excelize in tests, including a formula-like string
+- [x] 4.5 Write `easylist-export/README.md` showing an application worker that decodes an `ExportRequest`, calls `Run`, and stores the file, and naming the CSV formula risk; verify every Go snippet compiles via an example test
 
 ## 5. Integration checks
 
