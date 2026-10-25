@@ -1,67 +1,51 @@
-package querysql
+package sqlgoqu
 
 import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	easylist "github.com/mgpnd/easylist-go/easylist-core"
 	filter "github.com/mgpnd/easylist-go/easylist-filter"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
 )
 
-var predicateNumber = regexp.MustCompile(`^[+-]?[0-9]+(?:\.[0-9]+)?$`)
+var (
+	predicateNumber = regexp.MustCompile(`^[+-]?[0-9]+(?:\.[0-9]+)?$`)
+	canonicalUUID   = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+)
 
-// buildPredicate validates one predicate before producing its goqu expression.
-// Fields arrive case-folded from filter.Parse; truncate them here the same way
-// schema names are, so lookups match PostgreSQL's 63-byte identifier limit.
-func buildPredicate(table tableMeta, node filter.Predicate) (exp.Expression, error) {
-	field, operator, value := truncateIdentifier(node.Field()), node.Operator(), node.Value()
-	meta, ok := table.columns[field]
+var operatorText = map[filter.PredicateOp]string{
+	filter.OpEq: "=", filter.OpNeq: "!=", filter.OpGt: ">", filter.OpGte: ">=",
+	filter.OpLt: "<", filter.OpLte: "<=", filter.OpContains: "CONTAINS",
+	filter.OpExcludes: "EXCLUDES", filter.OpBetween: "BETWEEN",
+}
+
+// buildPredicate validates one predicate against the plan's fields before
+// producing its goqu expression.
+func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, error) {
+	name, operator, value := node.Field(), node.Operator(), node.Value()
+	field, ok := p.Lookup(name)
 	if !ok {
-		return nil, fmt.Errorf("unknown column %q at position %d", field, node.FieldPos())
+		return nil, fmt.Errorf("unknown field %q at position %d", name, node.FieldPos())
 	}
-	if meta.arrayDimensions > 1 {
-		return nil, fmt.Errorf("unsupported array dimensions (%d) for column %q at position %d", meta.arrayDimensions, field, node.FieldPos())
-	}
-	if meta.kind == kindUnsupported {
-		return nil, fmt.Errorf("unsupported type for column %q at position %d", field, node.FieldPos())
-	}
-	column := catalogColumnIdentifier(table, meta)
+	// Author SQL is parenthesized so operators inside it cannot bind to the comparison.
+	column := fieldExpression(p, field, true)
 	unsupported := func() (exp.Expression, error) {
-		operatorText := map[filter.PredicateOp]string{
-			filter.OpEq: "=", filter.OpNeq: "!=", filter.OpGt: ">", filter.OpGte: ">=",
-			filter.OpLt: "<", filter.OpLte: "<=", filter.OpContains: "CONTAINS",
-			filter.OpExcludes: "EXCLUDES", filter.OpBetween: "BETWEEN",
-		}[operator]
-		return nil, fmt.Errorf("unsupported operator %q for column %q at position %d", operatorText, field, node.OperatorPos())
-	}
-
-	if meta.arrayDimensions > 0 {
-		if operator != filter.OpContains && operator != filter.OpExcludes {
-			return unsupported()
-		}
-		arg, err := predicateArgument(meta.kind, value.Kind(), value.Text(), value.Pos())
-		if err != nil {
-			return nil, err
-		}
-		if operator == filter.OpContains {
-			return goqu.L("array_position(?, ?) IS NOT NULL", column, arg), nil
-		}
-		// PostgreSQL returns NULL for array_position on a NULL array, so its
-		// absence check also needs a non-null array guard. Empty arrays qualify.
-		return goqu.And(column.IsNotNull(), goqu.L("array_position(?, ?) IS NULL", column, arg)), nil
+		return nil, fmt.Errorf("unsupported operator %q for field %q at position %d", operatorText[operator], name, node.OperatorPos())
 	}
 
 	if operator == filter.OpContains {
-		if meta.kind != kindText {
+		if field.Type != easylist.Text {
 			return unsupported()
 		}
-		arg, err := predicateArgument(meta.kind, value.Kind(), value.Text(), value.Pos())
+		arg, err := predicateArgument(field, value.Kind(), value.Text(), value.Pos())
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +53,7 @@ func buildPredicate(table tableMeta, node filter.Predicate) (exp.Expression, err
 		return goqu.L(`? ILIKE ? ESCAPE E'\\'`, column, "%"+pattern+"%"), nil
 	}
 
-	ordered := meta.kind == kindInteger || meta.kind == kindFloat || meta.kind == kindNumeric || meta.kind == kindDate
+	ordered := slices.Contains([]easylist.Type{easylist.Integer, easylist.Float, easylist.Numeric, easylist.Date, easylist.Timestamp}, field.Type)
 	if operator == filter.OpBetween {
 		if !ordered {
 			return unsupported()
@@ -81,85 +65,104 @@ func buildPredicate(table tableMeta, node filter.Predicate) (exp.Expression, err
 		args := make([]any, 2)
 		for i, bound := range bounds {
 			boundKind := filter.LiteralNumber
-			if meta.kind == kindDate {
+			if field.Type == easylist.Date || field.Type == easylist.Timestamp {
 				boundKind = filter.LiteralString
 			}
-			arg, err := predicateArgument(meta.kind, boundKind, strings.TrimSpace(bound), value.Pos())
+			arg, err := predicateArgument(field, boundKind, strings.TrimSpace(bound), value.Pos())
 			if err != nil {
 				return nil, err
 			}
 			args[i] = arg
 		}
-		return column.Between(goqu.Range(args[0], args[1])), nil
+		return goqu.L("? BETWEEN ? AND ?", column, args[0], args[1]), nil
 	}
 	if operator != filter.OpEq && operator != filter.OpNeq && (!ordered || (operator != filter.OpGt && operator != filter.OpGte && operator != filter.OpLt && operator != filter.OpLte)) {
 		return unsupported()
 	}
-	arg, err := predicateArgument(meta.kind, value.Kind(), value.Text(), value.Pos())
+	arg, err := predicateArgument(field, value.Kind(), value.Text(), value.Pos())
 	if err != nil {
 		return nil, err
 	}
 	switch operator {
 	case filter.OpEq:
-		// Native goqu Boolean equality emits IS TRUE/FALSE; an explicit
-		// comparison keeps Boolean values in the prepared argument list.
-		if meta.kind == kindBoolean {
-			return goqu.L("? = ?", column, arg), nil
-		}
-		return column.Eq(arg), nil
+		// An explicit comparison keeps Boolean values in the prepared argument
+		// list; native goqu Boolean equality emits IS TRUE/FALSE.
+		return goqu.L("? = ?", column, arg), nil
 	case filter.OpNeq:
 		// goqu's Neq emits != and, for Booleans, IS NOT TRUE/FALSE, which also
 		// matches NULL. Plain <> keeps SQL semantics: NULL rows never match.
 		return goqu.L("? <> ?", column, arg), nil
 	case filter.OpGt:
-		return column.Gt(arg), nil
+		return goqu.L("? > ?", column, arg), nil
 	case filter.OpGte:
-		return column.Gte(arg), nil
+		return goqu.L("? >= ?", column, arg), nil
 	case filter.OpLt:
-		return column.Lt(arg), nil
+		return goqu.L("? < ?", column, arg), nil
 	case filter.OpLte:
-		return column.Lte(arg), nil
+		return goqu.L("? <= ?", column, arg), nil
 	}
 	return unsupported()
 }
 
 // predicateArgument converts a single scalar value. Numeric expressions keep
 // arbitrary precision decimal strings intact while adding PostgreSQL's cast.
-func predicateArgument(kind columnKind, valueKind filter.LiteralKind, text string, pos int) (any, error) {
-	invalid := func() (any, error) {
-		return nil, fmt.Errorf("invalid value %q for column type at position %d", text, pos)
+func predicateArgument(field easylist.PlanField, valueKind filter.LiteralKind, text string, pos int) (any, error) {
+	invalid := func(reason string) (any, error) {
+		return nil, fmt.Errorf("invalid %s value %q for field %q at position %d%s", field.Type, text, field.Name, pos, reason)
 	}
-	switch kind {
-	case kindText:
+	switch field.Type {
+	case easylist.Text:
 		if valueKind == filter.LiteralString {
 			return text, nil
 		}
-	case kindInteger:
+	case easylist.Integer:
 		if valueKind == filter.LiteralNumber {
 			parsed, err := strconv.ParseInt(text, 10, 64)
 			if err == nil {
 				return parsed, nil
 			}
 		}
-	case kindFloat:
+	case easylist.Float:
 		if valueKind == filter.LiteralNumber && predicateNumber.MatchString(text) {
 			parsed, err := strconv.ParseFloat(text, 64)
 			if err == nil && !math.IsInf(parsed, 0) && !math.IsNaN(parsed) {
 				return parsed, nil
 			}
 		}
-	case kindNumeric:
+	case easylist.Numeric:
 		if valueKind == filter.LiteralNumber && predicateNumber.MatchString(text) {
 			return goqu.L("?::numeric", text), nil
 		}
-	case kindDate:
+	case easylist.Date:
 		if valueKind == filter.LiteralString {
-			parsed, err := time.Parse("2006-01-02", text)
-			if err == nil && parsed.Format("2006-01-02") == text {
+			parsed, err := time.Parse(time.DateOnly, text)
+			if err == nil && parsed.Format(time.DateOnly) == text {
 				return parsed.UTC(), nil
 			}
 		}
-	case kindBoolean:
+	case easylist.Timestamp:
+		if valueKind == filter.LiteralString {
+			// time.RFC3339 requires an offset (Z or ±hh:mm) and accepts fractional seconds.
+			parsed, err := time.Parse(time.RFC3339Nano, text)
+			if err == nil {
+				return parsed, nil
+			}
+			if len(text) >= 19 && text[10] == 'T' {
+				return invalid(": timestamps need an offset such as Z or +02:00")
+			}
+		}
+	case easylist.UUID:
+		if valueKind == filter.LiteralString && canonicalUUID.MatchString(text) {
+			return strings.ToLower(text), nil
+		}
+	case easylist.Enum:
+		if valueKind == filter.LiteralString {
+			if slices.Contains(field.Values, text) {
+				return text, nil
+			}
+			return invalid(": not a declared value")
+		}
+	case easylist.Boolean:
 		if valueKind == filter.LiteralBool {
 			if strings.EqualFold(text, "true") {
 				return true, nil
@@ -169,5 +172,5 @@ func predicateArgument(kind columnKind, valueKind filter.LiteralKind, text strin
 			}
 		}
 	}
-	return invalid()
+	return invalid("")
 }

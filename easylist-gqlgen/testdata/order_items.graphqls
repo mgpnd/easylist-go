@@ -1,0 +1,41 @@
+type OrderItemsRow {
+  id: Int64!
+  sku: String!
+  quantity: Int64!
+}
+
+type OrderItemsPage {
+  items: [OrderItemsRow!]!
+  totalCount: Int!
+}
+
+enum OrderItemsSortField {
+  ID
+  SKU
+  QUANTITY
+}
+
+input OrderItemsSort {
+  field: OrderItemsSortField!
+  direction: SortDirection! = ASC
+}
+
+input OrderItemsListInput {
+  filter: String
+  sort: [OrderItemsSort!]
+  limit: Int
+  offset: Int
+}
+
+enum OrderItemsExportField {
+  ID
+  SKU
+  QUANTITY
+}
+
+input OrderItemsExportInput {
+  fields: [OrderItemsExportField!]!
+  filter: String
+  sort: [OrderItemsSort!]
+  format: ExportFormat!
+}

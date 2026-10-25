@@ -1,6 +1,9 @@
 go 1.25.0
 
 use (
+	./easylist-core
+	./easylist-export
 	./easylist-filter
+	./easylist-gqlgen
 	./easylist-sql-goqu
 )
