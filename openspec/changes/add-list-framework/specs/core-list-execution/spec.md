@@ -28,6 +28,10 @@ Each returned row SHALL contain one value per planned SQL field, keyed by field 
 - **WHEN** a field declared non-nullable returns NULL
 - **THEN** the request fails with an error naming the field
 
+#### Scenario: Undeclared enum value
+- **WHEN** an enum field returns a value that is not one of its declared values
+- **THEN** the request fails with an error naming the field and the value
+
 ### Requirement: Page result
 Running a list request SHALL return the page rows in plan order. The total count SHALL be computed with the count plan only when the caller asks for it, and the page query SHALL run only when the caller asks for rows.
 
@@ -40,7 +44,7 @@ Running a list request SHALL return the page rows in plan order. The total count
 - **THEN** only the count query runs
 
 ### Requirement: Calculated field evaluation
-A calculated field SHALL be evaluated by calling its function once per row, with the request context and that row, only when the field is needed. Its function SHALL be able to read every SQL field it declared as required. An error from the function SHALL fail evaluation of that field for that row.
+A calculated field SHALL be evaluated by calling its function once per row, with the request context and that row, only when the field is needed. Its function SHALL be able to read every SQL field it declared as required. An error from the function, or an enum result that is not a declared value, SHALL fail evaluation of that field for that row.
 
 #### Scenario: Calculated field reads its requirements
 - **WHEN** `display` requires `name` and `country` and is evaluated on a row with `name = 'Ann'` and `country` NULL

@@ -139,6 +139,9 @@ func (rt *Runtime) Stream(ctx context.Context, l *CompiledList, p *Plan, fn func
 				}
 				continue
 			}
+			if err := checkEnumValue(l.fields[f.Name], v); err != nil {
+				return fmt.Errorf("list %q: field %q: %w", l.def.Name, f.Name, err)
+			}
 			row.values[f.Name] = v
 		}
 		if err := fn(row); err != nil {

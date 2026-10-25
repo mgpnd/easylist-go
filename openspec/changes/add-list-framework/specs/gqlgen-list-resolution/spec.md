@@ -43,11 +43,15 @@ The resolver SHALL run the page query only when `items` is selected and the coun
 - **THEN** the field resolves to an error stating the maximum
 
 ### Requirement: Calculated field resolution
-A calculated field on `<P>Row` SHALL be resolved by calling its function for that row only when the field is selected. An error from the function SHALL become a GraphQL error on that field of that row.
+A calculated field on `<P>Row` SHALL be resolved by calling its function for that row only when the field is selected. An error from the function SHALL become a GraphQL error on that field of that row, and GraphQL non-null rules SHALL apply: a null in a non-null field nulls its nearest nullable parent, so a request whose path to the field is non-null fails with that error. A non-null field SHALL never resolve to a silent null.
 
 #### Scenario: Calculated field error
-- **WHEN** `display` returns an error for the second row
-- **THEN** the response has a field error at `items[1].display` and the other rows resolve normally
+- **WHEN** `display` returns an error for the second row, and the list field is declared `people(query: UsersListInput!): UsersPage!`
+- **THEN** the response has an error at `items[1].display` and `data` is null
+
+#### Scenario: Undeclared enum value
+- **WHEN** a row's enum value, from the database or a calculated function, is not a declared value of the field
+- **THEN** the request fails with an error naming the field and the value
 
 ### Requirement: One-call export resolver
 For each list the library SHALL provide a function that an application mutation resolver calls with the request context, the runtime, and the `<P>ExportInput`. It SHALL validate the input into an export request, pass it to the application's exporter, and return `ExportJob` with the exporter's job identifier.

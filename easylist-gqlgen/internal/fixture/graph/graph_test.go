@@ -230,6 +230,20 @@ func TestCalculatedFieldError(t *testing.T) {
 	if !reflect.DeepEqual(e.Path, []any{"people", "items", float64(1), "display"}) || !strings.Contains(e.Message, "cannot display Boom") {
 		t.Errorf("error = %+v", e)
 	}
+	// display and every parent up to the non-null people field are non-null,
+	// so the request fails.
+	if string(resp.Data) != "null" {
+		t.Errorf("data = %s, want null", resp.Data)
+	}
+}
+
+func TestUndeclaredEnumFailsRequest(t *testing.T) {
+	rt, db := newRuntime()
+	db.rows[0]["status"] = "archived"
+	resp := run(t, rt, `{ people(query: {}) { items { status } } }`)
+	if string(resp.Data) != "null" || len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0].Message, `"archived"`) {
+		t.Fatalf("data = %s, errors = %+v", resp.Data, resp.Errors)
+	}
 }
 
 func TestListErrorsRunNoQuery(t *testing.T) {

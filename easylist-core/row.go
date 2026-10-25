@@ -3,6 +3,7 @@ package easylist
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -67,5 +68,20 @@ func (r Row) Calc(ctx context.Context, name string) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("calculated field %q: %w", name, err)
 	}
+	if err := checkEnumValue(f, v); err != nil {
+		return nil, fmt.Errorf("calculated field %q: %w", name, err)
+	}
 	return v, nil
+}
+
+// checkEnumValue rejects an enum value that is not declared, so it can never
+// reach a client as a silent NULL.
+func checkEnumValue(f *Field, v any) error {
+	if f.Type != Enum || v == nil {
+		return nil
+	}
+	if s, _ := v.(string); !slices.Contains(f.Values, s) {
+		return fmt.Errorf("value %q is not a declared enum value", v)
+	}
+	return nil
 }

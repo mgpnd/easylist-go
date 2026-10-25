@@ -72,9 +72,9 @@ func NewEnum[T ~string](typeName string, valueNamePairs ...string) *Enum[T] {
 	return e
 }
 
-// Marshal writes the GraphQL name of v. An unknown value, which only a bad
-// database value can produce, is written as null; the non-null check then
-// reports it as a field error.
+// Marshal writes the GraphQL name of v. easylist rejects undeclared enum
+// values before they reach a row, so an unknown value is written as null
+// only when generated types are filled by hand.
 func (e *Enum[T]) Marshal(w io.Writer, v T) {
 	n, ok := e.toName[v]
 	if !ok {

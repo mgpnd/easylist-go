@@ -75,7 +75,7 @@ The plugin adds no fields to `Query`, `Mutation`, or any other type. Attach list
 
 ```graphql
 extend type Query {
-  people(query: UsersListInput!): UsersPage
+  people(query: UsersListInput!): UsersPage!
 }
 
 extend type Mutation {
@@ -97,7 +97,7 @@ func (r mutationResolver) ExportPeople(ctx context.Context, input easylistgen.Us
 }
 ```
 
-`Resolve<P>` reads the operation's selection: only fields under `items` are queried (through fragments, inline fragments, aliases, and `@skip`/`@include`), the page query runs only when `items` is selected, and the count query only when `totalCount` is. Filter syntax and planning errors become GraphQL errors on the list field, with their positions, and no query runs. Calculated fields are methods on `<P>Row` that gqlgen calls only when selected; an error from one becomes an error on that field of that row. Because row fields are non-null unless declared nullable, such an error nulls the nearest nullable parent, as GraphQL requires; declare the list field itself nullable, as above, to keep the error from nulling the whole response.
+`Resolve<P>` reads the operation's selection: only fields under `items` are queried (through fragments, inline fragments, aliases, and `@skip`/`@include`), the page query runs only when `items` is selected, and the count query only when `totalCount` is. Filter syntax and planning errors become GraphQL errors on the list field, with their positions, and no query runs. Calculated fields are methods on `<P>Row` that gqlgen calls only when selected; an error from one becomes an error on that field of that row. Row fields are non-null unless declared nullable, so, as GraphQL requires, such an error nulls the nearest nullable parent; with a non-null list field, as above, the whole request fails with that error. An enum value that is not declared, whether from the database or a calculated function, is an error too, never a silent null.
 
 `Export<P>` validates the input with the same rules as the export worker, passes the `easylist.ExportRequest` to `Runtime.Exporter`, and returns `ExportJob` with the exporter's job ID. With no exporter configured it returns `ErrExportsNotConfigured`.
 

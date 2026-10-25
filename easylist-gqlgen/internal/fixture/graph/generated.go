@@ -962,10 +962,10 @@ func (ec *executionContext) _Query_people(ctx context.Context, field graphql.Col
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v *easylistgen.UsersPage) graphql.Marshaler {
-			return ec.marshalOUsersPage2ᚖgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersPage(ctx, selections, v)
+			return ec.marshalNUsersPage2ᚖgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersPage(ctx, selections, v)
 		},
 		true,
-		false,
+		true,
 	)
 }
 func (ec *executionContext) fieldContext_Query_people(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3119,7 +3119,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_people(ctx, field)
-				if res == graphql.RequiredNull {
+				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
 				return res
@@ -4173,6 +4173,20 @@ func (ec *executionContext) unmarshalNUsersListInput2githubᚗcomᚋmgpndᚋeasy
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNUsersPage2githubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersPage(ctx context.Context, sel ast.SelectionSet, v easylistgen.UsersPage) graphql.Marshaler {
+	return ec._UsersPage(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUsersPage2ᚖgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersPage(ctx context.Context, sel ast.SelectionSet, v *easylistgen.UsersPage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UsersPage(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNUsersRow2ᚕᚖgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRowᚄ(ctx context.Context, sel ast.SelectionSet, v []*easylistgen.UsersRow) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -4508,13 +4522,6 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
-}
-
-func (ec *executionContext) marshalOUsersPage2ᚖgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersPage(ctx context.Context, sel ast.SelectionSet, v *easylistgen.UsersPage) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return ec._UsersPage(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOUsersSort2ᚕᚖgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersSortᚄ(ctx context.Context, v any) ([]*easylistgen.UsersSort, error) {

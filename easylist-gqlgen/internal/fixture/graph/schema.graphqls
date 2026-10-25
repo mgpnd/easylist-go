@@ -1,5 +1,5 @@
 type Query {
-  people(query: UsersListInput!): UsersPage
+  people(query: UsersListInput!): UsersPage!
   orderItems(query: OrderItemsListInput!): OrderItemsPage!
   health: Health!
 }

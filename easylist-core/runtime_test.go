@@ -350,3 +350,23 @@ func TestSQLDBAdapter(t *testing.T) {
 		t.Errorf("total = %d, queries = %+v", res.Total, queries)
 	}
 }
+
+func TestUndeclaredEnumValues(t *testing.T) {
+	db := &fakeDB{rows: map[string][][]any{"SELECT": {{int64(1), "archived"}}}}
+	rt := &Runtime{Driver: fakeDriver{}, DB: db}
+	_, err := rt.Fetch(context.Background(), mustUsers(t), Request{Fields: []string{"status"}}, Want{Rows: true})
+	if err == nil || !strings.Contains(err.Error(), `"status"`) || !strings.Contains(err.Error(), `"archived"`) {
+		t.Fatalf("SQL enum err = %v", err)
+	}
+
+	def := usersList()
+	def.Fields = append(def.Fields, Calc("tier", Enum, func(context.Context, Row) (string, error) { return "platinum", nil }).WithValues("gold"))
+	reg, err := NewRegistry(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, _ := reg.List("users")
+	if _, err := NewRow(l, nil).Calc(context.Background(), "tier"); err == nil || !strings.Contains(err.Error(), `"tier"`) || !strings.Contains(err.Error(), `"platinum"`) {
+		t.Fatalf("calculated enum err = %v", err)
+	}
+}
