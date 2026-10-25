@@ -1,0 +1,49 @@
+schema: spec-driven
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+context: |
+  This repo is a Go workspace (go.work at the root) of separate Go modules,
+  one per top-level easylist-* folder. One openspec/ at the root covers all of them.
+  - easylist-filter: parses filter expressions into an AST. It must stay free of
+    third-party dependencies and must not know about schemas or SQL.
+  - easylist-sql-goqu: compiles a filter AST into prepared PostgreSQL via goqu.
+    It depends on easylist-filter; the dependency never goes the other way.
+  easylist-filter is unpublished, so modules build only inside the workspace.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - List every module (easylist-* folder) the change touches
+  specs:
+    - Name capabilities <module>-<behaviour> without the easylist- prefix, e.g. filter-parsing or sql-goqu-compilation
+    - Put behaviour shared between modules (such as the AST contract) in a contract-<name> capability
+  tasks:
+    - Group tasks under one heading per module, in dependency order (easylist-filter before easylist-sql-goqu)
+    - When grammar.y changes, include a task to run go generate and commit parser_gen.go
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
