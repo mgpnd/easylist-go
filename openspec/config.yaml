@@ -13,9 +13,20 @@ context: |
   one per top-level easylist-* folder. One openspec/ at the root covers all of them.
   - easylist-filter: parses filter expressions into an AST. It must stay free of
     third-party dependencies and must not know about schemas or SQL.
-  - easylist-sql-goqu: compiles a filter AST into prepared PostgreSQL via goqu.
-    It depends on easylist-filter; the dependency never goes the other way.
-  easylist-filter is unpublished, so modules build only inside the workspace.
+  - easylist-core (package easylist): list definitions, the registry, the
+    planner, runtime execution, and the shared contracts (Plan, Driver,
+    Exporter, ExportRequest). Depends only on the standard library and
+    easylist-filter.
+  - easylist-sql-goqu (package sqlgoqu): PostgreSQL driver that compiles plans
+    into prepared SQL via goqu. Depends on easylist-core.
+  - easylist-gqlgen (package easylistgql): gqlgen plugin and runtime
+    resolvers. Depends on easylist-core, gqlgen, and gqlparser.
+  - easylist-export (package easylistexport): CSV and XLSX export worker.
+    Depends on easylist-core and excelize.
+  Dependencies point toward easylist-filter: filter <- core <- {sql-goqu,
+  gqlgen, export}. No module imports a sibling that depends on it.
+  The modules are unpublished, so they build only inside the workspace, and
+  go.mod files do not require sibling modules.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
@@ -33,7 +44,7 @@ rules:
     - Name capabilities <module>-<behaviour> without the easylist- prefix, e.g. filter-parsing or sql-goqu-compilation
     - Put behaviour shared between modules (such as the AST contract) in a contract-<name> capability
   tasks:
-    - Group tasks under one heading per module, in dependency order (easylist-filter before easylist-sql-goqu)
+    - Group tasks under one heading per module, in dependency order (easylist-filter, then easylist-core, then the modules that depend on it)
     - When grammar.y changes, include a task to run go generate and commit parser_gen.go
 
 # Per-operation guidance (optional)

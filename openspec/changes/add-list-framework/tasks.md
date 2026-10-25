@@ -45,5 +45,5 @@
 
 ## 5. Integration checks
 
-- [ ] 5.1 Add an end-to-end test in the `easylist-gqlgen` fixture project that wires core, `easylist-sql-goqu`, the generated schema, and a fake `Queryer`, then checks that a query selecting a joined field and a calculated field produces the expected SQL, arguments, and response, and that an export mutation followed by `easylistexport.Run` produces the expected CSV; verify with `go test ./...` from every module in the workspace
-- [ ] 5.2 Update the project context in `openspec/config.yaml` to describe the four modules and their dependency direction, and verify `openspec validate add-list-framework --strict` passes
+- [x] 5.1 Add an end-to-end test in the `easylist-gqlgen` fixture project that wires core, `easylist-sql-goqu`, the generated schema, and a fake `Queryer`, then checks that a query selecting a joined field and a calculated field produces the expected SQL, arguments, and response, and that an export mutation followed by `easylistexport.Run` produces the expected CSV; verify with `go test ./...` from every module in the workspace
+- [x] 5.2 Update the project context in `openspec/config.yaml` to describe the four modules and their dependency direction, and verify `openspec validate add-list-framework --strict` passes
