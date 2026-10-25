@@ -26,14 +26,14 @@
 
 ## 3. easylist-gqlgen
 
-- [ ] 3.1 Create the `easylist-gqlgen` module (package `easylistgql`) with a pinned gqlgen version, add it to `go.work`, and spike a plugin that writes one Go type in `MutateConfig`, binds it in `cfg.Models`, and injects one SDL type; verify a test-fixture gqlgen project generates and compiles with it
-- [ ] 3.2 Implement the `Int64`, `Decimal`, `Date`, and `UUID` scalar marshalers with configurable names; verify marshal/unmarshal tests including invalid inputs
-- [ ] 3.3 Implement SDL generation per list and the shared SDL (`SortDirection`, `ExportFormat`, `ExportJob`, scalars) per `gqlgen-schema-generation`; verify with golden SDL tests for a list using every field type, nullable fields, enums, and calculated fields
-- [ ] 3.4 Implement Go code generation per list (row struct with typed fields and calculated-field methods, page, inputs, enum types, `Resolve<P>` and `Export<P>` wrappers) and model binding in `MutateConfig`; verify the fixture project generates, compiles, and its generated code does not import back into the list definitions' importers
-- [ ] 3.5 Implement selection collection under `items` (fragments, inline fragments, aliases, `@skip`/`@include`, `__typename` ignored) and the generic list resolver (filter parse, planning, page/count only when selected, errors with positions); verify with fixture-schema tests executing operations through the gqlgen handler against a fake `Queryer`
-- [ ] 3.6 Implement the generic export resolver (input to `ExportRequest`, shared validation, `Exporter` call, `ExportJob` result, missing-exporter error); verify with fixture-schema mutation tests for accepted, invalid, and unconfigured cases
-- [ ] 3.7 Verify name-collision behavior: a fixture schema that already declares `UsersRow` makes generation fail with an error naming `UsersRow`
-- [ ] 3.8 Write `easylist-gqlgen/README.md` covering the custom generate entrypoint, attaching queries and mutations in the application schema, scalar renaming, and the import-cycle warning; verify the documented entrypoint matches the fixture project
+- [x] 3.1 Create the `easylist-gqlgen` module (package `easylistgql`) with a pinned gqlgen version, add it to `go.work`, and spike a plugin that writes one Go type in `MutateConfig`, binds it in `cfg.Models`, and injects one SDL type; verify a test-fixture gqlgen project generates and compiles with it
+- [x] 3.2 Implement the `Int64`, `Decimal`, `Date`, and `UUID` scalar marshalers with configurable names; verify marshal/unmarshal tests including invalid inputs
+- [x] 3.3 Implement SDL generation per list and the shared SDL (`SortDirection`, `ExportFormat`, `ExportJob`, scalars) per `gqlgen-schema-generation`; verify with golden SDL tests for a list using every field type, nullable fields, enums, and calculated fields
+- [x] 3.4 Implement Go code generation per list (row struct with typed fields and calculated-field methods, page, inputs, enum types, `Resolve<P>` and `Export<P>` wrappers) and model binding in `MutateConfig`; verify the fixture project generates, compiles, and its generated code does not import back into the list definitions' importers
+- [x] 3.5 Implement selection collection under `items` (fragments, inline fragments, aliases, `@skip`/`@include`, `__typename` ignored) and the generic list resolver (filter parse, planning, page/count only when selected, errors with positions); verify with fixture-schema tests executing operations through the gqlgen handler against a fake `Queryer`
+- [x] 3.6 Implement the generic export resolver (input to `ExportRequest`, shared validation, `Exporter` call, `ExportJob` result, missing-exporter error); verify with fixture-schema mutation tests for accepted, invalid, and unconfigured cases
+- [x] 3.7 Verify name-collision behavior: a fixture schema that already declares `UsersRow` makes generation fail with an error naming `UsersRow`
+- [x] 3.8 Write `easylist-gqlgen/README.md` covering the custom generate entrypoint, attaching queries and mutations in the application schema, scalar renaming, and the import-cycle warning; verify the documented entrypoint matches the fixture project
 
 ## 4. easylist-export
 

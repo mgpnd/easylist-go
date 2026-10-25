@@ -1,0 +1,9 @@
+schema:
+  - schema.graphqls
+exec:
+  filename: generated.go
+  package: graph
+model:
+  filename: model/models_gen.go
+  package: model
+skip_mod_tidy: true

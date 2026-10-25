@@ -1,0 +1,144 @@
+package easylistgql
+
+import (
+	"fmt"
+	"strings"
+
+	easylist "github.com/mgpnd/easylist-go/easylist-core"
+)
+
+// Scalars names the GraphQL scalars the plugin declares. Empty names default
+// to Int64, Decimal, Date, UUID, and Time. Rename one when the application
+// schema already declares a scalar with the default name.
+type Scalars struct {
+	Int64, Decimal, Date, UUID, Time string
+}
+
+func (s Scalars) withDefaults() Scalars {
+	set := func(v *string, def string) {
+		if *v == "" {
+			*v = def
+		}
+	}
+	set(&s.Int64, "Int64")
+	set(&s.Decimal, "Decimal")
+	set(&s.Date, "Date")
+	set(&s.UUID, "UUID")
+	set(&s.Time, "Time")
+	return s
+}
+
+// scalarFor returns the GraphQL scalar of a non-enum type, and whether the
+// plugin must declare it.
+func (s Scalars) scalarFor(t easylist.Type) (name string, custom bool) {
+	switch t {
+	case easylist.Text:
+		return "String", false
+	case easylist.Integer:
+		return s.Int64, true
+	case easylist.Float:
+		return "Float", false
+	case easylist.Numeric:
+		return s.Decimal, true
+	case easylist.Boolean:
+		return "Boolean", false
+	case easylist.Date:
+		return s.Date, true
+	case easylist.Timestamp:
+		return s.Time, true
+	case easylist.UUID:
+		return s.UUID, true
+	}
+	panic(fmt.Sprintf("easylistgql: no scalar for type %s", t))
+}
+
+// graphQLType returns a field's GraphQL type, without the non-null marker.
+func graphQLType(l *easylist.CompiledList, f easylist.Field, s Scalars) string {
+	if f.Type == easylist.Enum {
+		return l.TypePrefix() + easylist.PascalCase(f.Name)
+	}
+	name, _ := s.scalarFor(f.Type)
+	return name
+}
+
+// listSDL returns the types generated for one list.
+func listSDL(l *easylist.CompiledList, s Scalars) string {
+	p := l.TypePrefix()
+	var b strings.Builder
+	fields := l.Fields()
+
+	fmt.Fprintf(&b, "type %sRow {\n", p)
+	for _, f := range fields {
+		bang := "!"
+		if f.Nullable {
+			bang = ""
+		}
+		fmt.Fprintf(&b, "  %s: %s%s\n", f.Name, graphQLType(l, f, s), bang)
+	}
+	b.WriteString("}\n\n")
+
+	fmt.Fprintf(&b, "type %sPage {\n  items: [%sRow!]!\n  totalCount: Int!\n}\n\n", p, p)
+
+	for _, f := range fields {
+		if f.Type != easylist.Enum {
+			continue
+		}
+		fmt.Fprintf(&b, "enum %s {\n", graphQLType(l, f, s))
+		for _, v := range f.Values {
+			fmt.Fprintf(&b, "  %s\n", easylist.EnumName(v))
+		}
+		b.WriteString("}\n\n")
+	}
+
+	fmt.Fprintf(&b, "enum %sSortField {\n", p)
+	for _, f := range fields {
+		if !f.Calculated() {
+			fmt.Fprintf(&b, "  %s\n", easylist.EnumName(f.Name))
+		}
+	}
+	b.WriteString("}\n\n")
+
+	fmt.Fprintf(&b, "input %sSort {\n  field: %sSortField!\n  direction: SortDirection! = ASC\n}\n\n", p, p)
+	fmt.Fprintf(&b, "input %sListInput {\n  filter: String\n  sort: [%sSort!]\n  limit: Int\n  offset: Int\n}\n\n", p, p)
+
+	fmt.Fprintf(&b, "enum %sExportField {\n", p)
+	for _, f := range fields {
+		fmt.Fprintf(&b, "  %s\n", easylist.EnumName(f.Name))
+	}
+	b.WriteString("}\n\n")
+
+	fmt.Fprintf(&b, "input %sExportInput {\n  fields: [%sExportField!]!\n  filter: String\n  sort: [%sSort!]\n  format: ExportFormat!\n}\n", p, p, p)
+	return b.String()
+}
+
+// usedScalars returns the custom scalars some list field uses.
+func usedScalars(lists []*easylist.CompiledList, s Scalars) map[string]bool {
+	used := map[string]bool{}
+	for _, l := range lists {
+		for _, f := range l.Fields() {
+			if f.Type == easylist.Enum {
+				continue
+			}
+			if name, custom := s.scalarFor(f.Type); custom {
+				used[name] = true
+			}
+		}
+	}
+	return used
+}
+
+// sharedSDL returns the types declared once for all lists: SortDirection,
+// ExportFormat, ExportJob, and every custom scalar some list uses.
+func sharedSDL(lists []*easylist.CompiledList, s Scalars) string {
+	used := usedScalars(lists, s)
+	var b strings.Builder
+	b.WriteString("enum SortDirection {\n  ASC\n  DESC\n}\n\n")
+	b.WriteString("enum ExportFormat {\n  CSV\n  XLSX\n}\n\n")
+	b.WriteString("type ExportJob {\n  id: ID!\n}\n")
+	for _, name := range []string{s.Int64, s.Decimal, s.Date, s.UUID, s.Time} {
+		if used[name] {
+			fmt.Fprintf(&b, "\nscalar %s\n", name)
+		}
+	}
+	return b.String()
+}
