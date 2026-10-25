@@ -47,3 +47,8 @@ rules:
 #     archive:
 #       guidance:
 #         - Summarize the archive outcome before finishing
+operations:
+  apply:
+    guidance:
+      - Implement each numbered task group (## heading in tasks.md) by delegating it to one general-purpose subagent, one group at a time in order. Give it the change name, the group's tasks, and the paths from contextFiles; tell it not to edit tasks.md.
+      - After each subagent returns, review its summary, run the module's tests yourself, then tick that group's checkboxes and rerun the apply instructions before starting the next group.
