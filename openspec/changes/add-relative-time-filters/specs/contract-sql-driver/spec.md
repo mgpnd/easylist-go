@@ -42,8 +42,19 @@ A driver SHALL convert each filter literal to its field's type and reject mismat
 
 ## ADDED Requirements
 
-### Requirement: Relative time semantics
-A date-valued relative time value compared with a date field SHALL compare with that date. A timestamp-valued one compared with a timestamp field SHALL compare with that instant. A date-valued value `D` compared with a timestamp field SHALL cover the whole day `D` in the reference time's zone: with `S` the instant at which `D` starts and `E` the instant at which the next day starts, `> D` SHALL match values `>= E`, `>= D` values `>= S`, `< D` values `< S`, `<= D` values `< E`, `= D` values in `[S, E)`, and `!= D` every row that `= D` does not match, including NULL.
+### Requirement: Relative time comparison
+A date-valued relative time value compared with a date field SHALL compare with that date. A timestamp-valued one compared with a timestamp field SHALL compare with that instant.
+
+#### Scenario: Date field
+- **WHEN** a filter is `due > {TODAY + 5::DAYS}` for date field `due`, evaluated on 2026-10-27
+- **THEN** rows match when `due` is after 2026-11-01
+
+#### Scenario: Timestamp field
+- **WHEN** a filter is `seen_at > {NOW - 30::MINUTES}` evaluated at 2026-10-27T10:00:00Z
+- **THEN** rows match when `seen_at` is after 2026-10-27T09:30:00Z
+
+### Requirement: Whole-day comparison on timestamp fields
+A date-valued value `D` compared with a timestamp field SHALL cover the whole day `D` in the reference time's zone. With `S` the instant at which `D` starts and `E` the instant at which the next day starts, `> D` SHALL match values `>= E`, `>= D` values `>= S`, `< D` values `< S`, `<= D` values `< E`, `= D` values in `[S, E)`, and `!= D` every row that `= D` does not match, including NULL.
 
 #### Scenario: Whole last day included
 - **WHEN** a filter is `created_at <= END_OF_WEEK` for a timestamp field, evaluated on Tuesday 2026-10-27 in UTC with a Monday week start, and a row has `created_at` 2026-11-01T23:59:59Z
@@ -60,7 +71,3 @@ A date-valued relative time value compared with a date field SHALL compare with 
 #### Scenario: Not equal to a day matches NULL
 - **WHEN** a filter is `created_at != TODAY` and a row has `created_at` NULL
 - **THEN** that row matches
-
-#### Scenario: Date field
-- **WHEN** a filter is `due > {TODAY + 5::DAYS}` for date field `due`, evaluated on 2026-10-27
-- **THEN** rows match when `due` is after 2026-11-01

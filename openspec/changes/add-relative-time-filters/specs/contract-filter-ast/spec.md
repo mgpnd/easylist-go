@@ -17,8 +17,15 @@ A relative time value, bare or in braces, SHALL be represented as a literal of a
 - **WHEN** the value of `due = TODAY` is evaluated twice with reference time 2026-10-27T23:30:00-05:00
 - **THEN** both results are the date 2026-10-27
 
-### Requirement: Relative time keyword meaning
-Given a reference time `now` in time zone `Z` and a first day of the week `W`, evaluation SHALL give: `NOW` the instant `now`; `TODAY` the date of `now` in `Z`; `START_OF_WEEK` the latest date on or before `TODAY` that falls on `W`; `END_OF_WEEK` six days after `START_OF_WEEK`; `START_OF_MONTH` and `END_OF_MONTH` the first and last date of `TODAY`'s month; `START_OF_YEAR` and `END_OF_YEAR` January 1 and December 31 of `TODAY`'s year. A date SHALL be represented as midnight at the start of that date in `Z`.
+### Requirement: NOW and TODAY meaning
+Given a reference time `now` in time zone `Z`, `NOW` SHALL evaluate to the instant `now` and `TODAY` to the date of `now` in `Z`. A date SHALL be represented as midnight at the start of that date in `Z`.
+
+#### Scenario: Time zone decides the date
+- **WHEN** `TODAY` is evaluated with reference time 2026-10-27T23:30:00Z expressed in UTC+02:00
+- **THEN** the result is 2026-10-28, represented as 2026-10-28T00:00:00+02:00
+
+### Requirement: Week keyword meaning
+Given a first day of the week `W`, `START_OF_WEEK` SHALL evaluate to the latest date on or before `TODAY` that falls on `W`, and `END_OF_WEEK` to six days after `START_OF_WEEK`.
 
 #### Scenario: Week with Monday start
 - **WHEN** `START_OF_WEEK` and `END_OF_WEEK` are evaluated with reference time Tuesday 2026-10-27T10:00:00Z and first day Monday
@@ -28,24 +35,19 @@ Given a reference time `now` in time zone `Z` and a first day of the week `W`, e
 - **WHEN** `START_OF_WEEK` is evaluated with reference time Tuesday 2026-10-27T10:00:00Z and first day Sunday
 - **THEN** the result is 2026-10-25
 
-#### Scenario: Time zone decides the date
-- **WHEN** `TODAY` is evaluated with reference time 2026-10-27T23:30:00Z expressed in UTC+02:00
-- **THEN** the result is 2026-10-28
+### Requirement: Month and year keyword meaning
+`START_OF_MONTH` and `END_OF_MONTH` SHALL evaluate to the first and last date of `TODAY`'s month. `START_OF_YEAR` and `END_OF_YEAR` SHALL evaluate to January 1 and December 31 of `TODAY`'s year.
 
 #### Scenario: End of February
 - **WHEN** `END_OF_MONTH` is evaluated with reference time 2028-02-10T00:00:00Z
 - **THEN** the result is 2028-02-29
 
-### Requirement: Duration arithmetic meaning
-Evaluation SHALL apply operations left to right as written. `n::DAYS` SHALL move by `n` calendar days in `Z`, keeping the wall-clock time of a timestamp. `n::HOURS` and `n::MINUTES` SHALL move by `n` × 60 or `n` minutes of elapsed time. `n::BUSINESS_DAYS` SHALL move to the `n`th Monday-to-Friday date after (for positive `n`) or before (for negative `n`) the start date, keeping the wall-clock time of a timestamp; `0::BUSINESS_DAYS` SHALL move a Saturday or Sunday forward to the next Monday and leave a weekday unchanged. An evaluation whose result falls outside the years 1 to 9999 SHALL fail with an error.
+#### Scenario: End of year
+- **WHEN** `END_OF_YEAR` is evaluated with reference time 2026-10-27T10:00:00Z
+- **THEN** the result is 2026-12-31
 
-#### Scenario: Business days over a weekend
-- **WHEN** `{TODAY + 3::BUSINESS_DAYS}` is evaluated on Thursday 2026-10-29
-- **THEN** the result is Tuesday 2026-11-03
-
-#### Scenario: Negative business days
-- **WHEN** `{TODAY - 1::BUSINESS_DAYS}` is evaluated on Monday 2026-11-02
-- **THEN** the result is Friday 2026-10-30
+### Requirement: Calendar and elapsed durations
+Evaluation SHALL apply operations left to right as written. `n::DAYS` SHALL move by `n` calendar days in `Z`, keeping the wall-clock time of a timestamp. `n::HOURS` and `n::MINUTES` SHALL move by `n` × 60 or `n` minutes of elapsed time. A result outside the years 1 to 9999 SHALL fail evaluation with an error.
 
 #### Scenario: Calendar days across a DST change
 - **WHEN** `{NOW + 1::DAYS}` is evaluated at 2026-10-24T12:00 in a zone whose clocks go back one hour on 2026-10-25
@@ -58,6 +60,21 @@ Evaluation SHALL apply operations left to right as written. `n::DAYS` SHALL move
 #### Scenario: Out of range
 - **WHEN** `{TODAY + 10000000::DAYS}` is evaluated in 2026
 - **THEN** evaluation fails with an error
+
+### Requirement: Business day durations
+`n::BUSINESS_DAYS` SHALL move to the `n`th Monday-to-Friday date after the start date for positive `n`, or before it for negative `n`, keeping the wall-clock time of a timestamp. `0::BUSINESS_DAYS` SHALL move a Saturday or Sunday forward to the next Monday and leave a weekday unchanged.
+
+#### Scenario: Business days over a weekend
+- **WHEN** `{TODAY + 3::BUSINESS_DAYS}` is evaluated on Thursday 2026-10-29
+- **THEN** the result is Tuesday 2026-11-03
+
+#### Scenario: Negative business days
+- **WHEN** `{TODAY - 1::BUSINESS_DAYS}` is evaluated on Monday 2026-11-02
+- **THEN** the result is Friday 2026-10-30
+
+#### Scenario: Zero business days on a weekend
+- **WHEN** `{TODAY + 0::BUSINESS_DAYS}` is evaluated on Saturday 2026-10-31
+- **THEN** the result is Monday 2026-11-02
 
 ### Requirement: Folded numeric literals
 A brace expression without time keywords or durations SHALL be represented as an ordinary number literal whose text is the exact result in plain decimal notation, with no exponent, no leading `+`, and no trailing fractional zeros, and whose position is that of the `{`.
