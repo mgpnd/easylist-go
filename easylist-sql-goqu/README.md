@@ -74,6 +74,26 @@ List-author SQL must not contain `$n` placeholders of its own, because they woul
 - `BETWEEN 'a,b'` is inclusive, with spaces around each bound trimmed.
 - NULL ordering follows PostgreSQL defaults: last when ascending, first when descending.
 
+Expression values (`TODAY`, `NOW`, `{TODAY + 5::DAYS}`, `{10 / 4}`, ...):
+
+- The driver never evaluates an expression. It binds the result that the easylist-core planner stored on the plan, read with `Plan.Value`. A plan without that result fails at the literal's position.
+- The SQL never uses `now()`, `CURRENT_DATE`, `AT TIME ZONE`, or any other database clock or time zone function, so results do not depend on the database session. Compiling the same parsed filter with another `Request.Now` binds other values in the same SQL.
+- A number result is bound like a number literal of the same text: `price > {10 / 4}` binds `'2.5'::numeric`, and `qty > {10 / 4}` on an integer field fails at the literal's position because `2.5` is not an integer.
+- A date result on a date field is bound like a `YYYY-MM-DD` literal: `due > {TODAY + 5::DAYS}` binds the date five days after today in the request's zone.
+- A timestamp result on a timestamp field is bound as a `time.Time` instant truncated to microseconds, PostgreSQL's precision.
+- A date result `D` on a timestamp field covers the whole day `D` in the request's zone. With `S` the instant the day starts and `E` the instant the next day starts (one calendar day later, so 23 or 25 hours across a DST change), both bound as `time.Time` instants:
+
+  | Filter | SQL |
+  | --- | --- |
+  | `x > D` | `x >= E` |
+  | `x >= D` | `x >= S` |
+  | `x < D` | `x < S` |
+  | `x <= D` | `x < E` |
+  | `x = D` | `(x >= S AND x < E)` |
+  | `x != D` | `COALESCE(NOT (x >= S AND x < E), TRUE)` |
+
+  So `created_at <= END_OF_WEEK` includes all of Sunday, and `created_at != TODAY` also matches NULL, like other `!=` comparisons. `=` and `!=` emit the field's SQL twice. Fixed string values such as `created_at > '2026-10-27T00:00:00Z'` keep their plain comparison.
+
 Array fields:
 
 - An array field is selected as `to_json(x)::text AS "name"`, so the runtime receives JSON array text and a NULL array stays NULL. The `::text` cast makes every `database/sql` driver return a string.

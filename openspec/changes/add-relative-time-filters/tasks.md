@@ -21,9 +21,9 @@
 
 ## 3. easylist-sql-goqu
 
-- [ ] 3.1 In `buildPredicate`, take the value of a `LiteralExpr` from `Plan.Value`, never evaluating it. Number results go through the existing number conversion, date results on date fields bind like `YYYY-MM-DD` literals, and timestamp results bind truncated to microseconds
-- [ ] 3.2 Implement whole-day comparisons for date results on timestamp fields: operator rewriting for `> >= < <=`, `(? >= ? AND ? < ?)` for `=`, and `COALESCE(NOT (…), TRUE)` for `!=`, with `E = S.AddDate(0, 0, 1)` in the result's zone. Cover every `contract-sql-driver` "Relative time comparison" and "Whole-day comparison on timestamp fields" scenario and every `sql-goqu-compilation` scenario with SQL and argument golden tests, including UTC+02:00 boundaries and a DST zone
-- [ ] 3.3 Add a driver-level golden test for `created_at >= START_OF_WEEK AND due < {TODAY + 5::BUSINESS_DAYS} AND price > {10 / 4}`, planned with a fixed `Request.Now`, checking argument order. Update the README's PostgreSQL semantics section with expression values and whole-day comparisons. Verify `go test ./...` passes
+- [x] 3.1 In `buildPredicate`, take the value of a `LiteralExpr` from `Plan.Value`, never evaluating it. Number results go through the existing number conversion, date results on date fields bind like `YYYY-MM-DD` literals, and timestamp results bind truncated to microseconds
+- [x] 3.2 Implement whole-day comparisons for date results on timestamp fields: operator rewriting for `> >= < <=`, `(? >= ? AND ? < ?)` for `=`, and `COALESCE(NOT (…), TRUE)` for `!=`, with `E = S.AddDate(0, 0, 1)` in the result's zone. Cover every `contract-sql-driver` "Relative time comparison" and "Whole-day comparison on timestamp fields" scenario and every `sql-goqu-compilation` scenario with SQL and argument golden tests, including UTC+02:00 boundaries and a DST zone
+- [x] 3.3 Add a driver-level golden test for `created_at >= START_OF_WEEK AND due < {TODAY + 5::BUSINESS_DAYS} AND price > {10 / 4}`, planned with a fixed `Request.Now`, checking argument order. Update the README's PostgreSQL semantics section with expression values and whole-day comparisons. Verify `go test ./...` passes
 
 ## 4. easylist-gqlgen
 

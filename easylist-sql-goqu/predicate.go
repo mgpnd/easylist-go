@@ -53,6 +53,15 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 		return unsupported()
 	}
 
+	if value.Kind() == filter.LiteralExpr {
+		v, ok := p.Value(node)
+		if !ok {
+			// The planner evaluates every expression in the plan's filter.
+			return nil, fmt.Errorf("expression %s for field %q has no evaluated value at position %d", value.Text(), name, value.Pos())
+		}
+		return exprPredicate(field, column, operator, v, value.Pos())
+	}
+
 	if field.Array {
 		if operator != filter.OpContains && operator != filter.OpExcludes {
 			return unsupported()
@@ -107,26 +116,99 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 	if err != nil {
 		return nil, err
 	}
+	return comparison(column, operator, arg), nil
+}
+
+// comparison compiles one of = != > >= < <= against a bound argument.
+func comparison(column exp.LiteralExpression, operator filter.PredicateOp, arg any) exp.Expression {
 	switch operator {
 	case filter.OpEq:
 		// An explicit comparison keeps Boolean values in the prepared argument
 		// list; native goqu Boolean equality emits IS TRUE/FALSE.
-		return goqu.L("? = ?", column, arg), nil
+		return goqu.L("? = ?", column, arg)
 	case filter.OpNeq:
 		// != matches exactly the rows = does not, NULL included. goqu's Neq
 		// emits != and, for Booleans, IS NOT TRUE/FALSE, which drops the bound
 		// argument; an explicit IS DISTINCT FROM keeps every value bound.
-		return goqu.L("? IS DISTINCT FROM ?", column, arg), nil
+		return goqu.L("? IS DISTINCT FROM ?", column, arg)
 	case filter.OpGt:
-		return goqu.L("? > ?", column, arg), nil
+		return goqu.L("? > ?", column, arg)
 	case filter.OpGte:
-		return goqu.L("? >= ?", column, arg), nil
+		return goqu.L("? >= ?", column, arg)
 	case filter.OpLt:
-		return goqu.L("? < ?", column, arg), nil
-	case filter.OpLte:
-		return goqu.L("? <= ?", column, arg), nil
+		return goqu.L("? < ?", column, arg)
 	}
-	return unsupported()
+	return goqu.L("? <= ?", column, arg)
+}
+
+// exprPredicate compiles a comparison with the planner's evaluated result of
+// an expression literal at pos. It never evaluates the expression. The
+// planner checks the result kind against the field; the checks here only
+// guard against a plan that breaks that contract.
+func exprPredicate(field easylist.PlanField, column exp.LiteralExpression, operator filter.PredicateOp, v easylist.Value, pos int) (exp.Expression, error) {
+	if field.Array {
+		return nil, fmt.Errorf("array field %q does not accept an expression value at position %d", field.Name, pos)
+	}
+	switch operator {
+	case filter.OpEq, filter.OpNeq, filter.OpGt, filter.OpGte, filter.OpLt, filter.OpLte:
+	default:
+		return nil, fmt.Errorf("operator %q does not accept an expression value at position %d", operatorText[operator], pos)
+	}
+	mismatch := func() (exp.Expression, error) {
+		return nil, fmt.Errorf("cannot compare %s field %q with a %s value at position %d", field.Type, field.Name, v.Kind, pos)
+	}
+	switch v.Kind {
+	case easylist.ValueNumber:
+		switch field.Type {
+		case easylist.Integer, easylist.Float, easylist.Numeric:
+			// The exact decimal text converts like a number literal, so an
+			// integer field still rejects 2.5.
+			arg, err := predicateArgument(field, filter.LiteralNumber, v.Number, pos)
+			if err != nil {
+				return nil, err
+			}
+			return comparison(column, operator, arg), nil
+		}
+	case easylist.ValueDate:
+		switch field.Type {
+		case easylist.Date:
+			// Bound like a YYYY-MM-DD literal: the calendar date at UTC midnight.
+			y, m, d := v.Time.Date()
+			return comparison(column, operator, time.Date(y, m, d, 0, 0, 0, 0, time.UTC)), nil
+		case easylist.Timestamp:
+			return wholeDay(column, operator, v.Time), nil
+		}
+	case easylist.ValueTimestamp:
+		if field.Type == easylist.Timestamp {
+			return comparison(column, operator, v.Time.Truncate(time.Microsecond)), nil
+		}
+	}
+	return mismatch()
+}
+
+// wholeDay compares a timestamp with the whole day that starts at start, in
+// start's zone. The next day starts at E = start + 1 calendar day, which is
+// 23 or 25 hours later across a DST change. > D matches values >= E, >= D
+// values >= start, < D values < start, <= D values < E, = D values in
+// [start, E), and != D every other row, NULL included.
+func wholeDay(column exp.LiteralExpression, operator filter.PredicateOp, start time.Time) exp.Expression {
+	s := start.Truncate(time.Microsecond)
+	e := start.AddDate(0, 0, 1).Truncate(time.Microsecond)
+	switch operator {
+	case filter.OpGt:
+		return goqu.L("? >= ?", column, e)
+	case filter.OpGte:
+		return goqu.L("? >= ?", column, s)
+	case filter.OpLt:
+		return goqu.L("? < ?", column, s)
+	case filter.OpLte:
+		return goqu.L("? < ?", column, e)
+	case filter.OpEq:
+		return goqu.L("(? >= ? AND ? < ?)", column, s, column, e)
+	}
+	// The range test is NULL for a NULL field; COALESCE makes such rows
+	// match, as EXCLUDES does.
+	return goqu.L("COALESCE(NOT (? >= ? AND ? < ?), TRUE)", column, s, column, e)
 }
 
 // arrayPredicate compiles CONTAINS or EXCLUDES on an array field. Each value
