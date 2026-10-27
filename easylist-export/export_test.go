@@ -12,6 +12,7 @@ import (
 	"time"
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
+	filter "github.com/mgpnd/easylist-go/easylist-filter"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -350,4 +351,95 @@ func TestInvalidFormat(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "PDF") {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+// recordingDriver records each plan before compiling it like fakeDriver.
+type recordingDriver struct{ plans []*easylist.Plan }
+
+func (d *recordingDriver) Compile(p *easylist.Plan) (string, []any, error) {
+	d.plans = append(d.plans, p)
+	return fakeDriver{}.Compile(p)
+}
+
+// exportValue runs req with rt and returns the evaluated value of the
+// request's single-predicate filter.
+func exportValue(t *testing.T, rt *easylist.Runtime, req easylist.ExportRequest) easylist.Value {
+	t.Helper()
+	d := &recordingDriver{}
+	rt.Driver, rt.DB = d, &fakeDB{}
+	if err := Run(context.Background(), registry(t), rt, req, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(d.plans) != 1 {
+		t.Fatalf("compiled %d plans, want 1", len(d.plans))
+	}
+	pred, ok := d.plans[0].Filter.(filter.Predicate)
+	if !ok {
+		t.Fatalf("filter = %T, want a predicate", d.plans[0].Filter)
+	}
+	v, ok := d.plans[0].Value(pred)
+	if !ok {
+		t.Fatal("plan has no value for the predicate")
+	}
+	return v
+}
+
+func TestRelativeValues(t *testing.T) {
+	nextDay := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return nextDay }
+	offset := func(m int) *int { return &m }
+
+	t.Run("job runs the next day", func(t *testing.T) {
+		v := exportValue(t, &easylist.Runtime{Clock: clock}, easylist.ExportRequest{
+			List: "users", Fields: []string{"name"}, Format: easylist.CSV,
+			Filter: "created_at = TODAY", AsOf: time.Date(2026, 10, 27, 21, 0, 0, 0, time.UTC), Timezone: offset(120),
+		})
+		// 2026-10-27 in UTC+02:00 runs from 2026-10-26T22:00Z to 2026-10-27T22:00Z.
+		start := time.Date(2026, 10, 26, 22, 0, 0, 0, time.UTC)
+		if v.Kind != easylist.ValueDate || !v.Time.Equal(start) {
+			t.Fatalf("value = %+v, want date starting at %v", v, start)
+		}
+		if _, off := v.Time.Zone(); off != 2*3600 {
+			t.Errorf("zone offset = %ds, want 7200", off)
+		}
+		if end := v.Time.AddDate(0, 0, 1); !end.Equal(time.Date(2026, 10, 27, 22, 0, 0, 0, time.UTC)) {
+			t.Errorf("day ends at %v", end.UTC())
+		}
+	})
+
+	t.Run("old request with offset", func(t *testing.T) {
+		v := exportValue(t, &easylist.Runtime{Clock: clock}, easylist.ExportRequest{
+			List: "users", Fields: []string{"name"}, Format: easylist.CSV,
+			Filter: "created_at <= NOW", Timezone: offset(-300),
+		})
+		if v.Kind != easylist.ValueTimestamp || !v.Time.Equal(nextDay) {
+			t.Fatalf("value = %+v, want %v", v, nextDay)
+		}
+		if _, off := v.Time.Zone(); off != -300*60 {
+			t.Errorf("zone offset = %ds, want -18000", off)
+		}
+	})
+
+	t.Run("old request without offset", func(t *testing.T) {
+		v := exportValue(t, &easylist.Runtime{Clock: clock}, easylist.ExportRequest{
+			List: "users", Fields: []string{"name"}, Format: easylist.CSV, Filter: "created_at = TODAY",
+		})
+		local := nextDay.In(time.Local)
+		want := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.Local)
+		if v.Kind != easylist.ValueDate || !v.Time.Equal(want) || v.Time.Location() != time.Local {
+			t.Fatalf("value = %+v, want local midnight %v", v, want)
+		}
+	})
+
+	t.Run("runtime week start", func(t *testing.T) {
+		sunday := time.Sunday
+		v := exportValue(t, &easylist.Runtime{WeekStart: &sunday}, easylist.ExportRequest{
+			List: "users", Fields: []string{"name"}, Format: easylist.CSV, Filter: "created_at >= START_OF_WEEK",
+			AsOf: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC), Timezone: offset(0),
+		})
+		want := time.Date(2026, 10, 25, 0, 0, 0, 0, time.UTC)
+		if v.Kind != easylist.ValueDate || !v.Time.Equal(want) {
+			t.Fatalf("value = %+v, want Sunday %v", v, want)
+		}
+	})
 }

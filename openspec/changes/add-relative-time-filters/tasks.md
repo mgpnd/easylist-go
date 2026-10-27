@@ -33,8 +33,8 @@
 
 ## 5. easylist-export
 
-- [ ] 5.1 In `Run`, fill a zero `Now` with `rt.Now()` in the request's zone (server local when `Timezone` is unset) after `ValidateExport`, and fill `WeekStart` from the runtime. Cover the `export-file-generation` scenarios (a job run a day later uses `AsOf`; an old request uses the clock) and update the README
+- [x] 5.1 In `Run`, fill a zero `Now` with `rt.Now()` in the request's zone (server local when `Timezone` is unset) after `ValidateExport`, and fill `WeekStart` from the runtime. Cover the `export-file-generation` scenarios (a job run a day later uses `AsOf`; an old request uses the clock) and update the README
 
 ## 6. Workspace integration
 
-- [ ] 6.1 Run `gofmt -l`, `go vet ./...`, and `go test -race ./...` in every module listed in `go.work`, and verify all pass
+- [x] 6.1 Run `gofmt -l`, `go vet ./...`, and `go test -race ./...` in every module listed in `go.work`, and verify all pass
