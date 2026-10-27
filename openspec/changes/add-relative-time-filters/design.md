@@ -68,6 +68,21 @@ During evaluation, a duration is a list of `(amount, unit)` terms in the order w
 ### Keywords only on the value side
 The lexer keeps scanning `today` as `tIDENT`. A new grammar alternative `tIDENT ordinary_op tIDENT` (restricted to comparison operators in the action) maps the right-hand identifier through a keyword table into a `KeywordNode`, and reports an unknown word at its position. A quoted identifier on the right is rejected. This avoids reserving words that are likely to be column names (`now`, `today`). The cost is that the action, rather than the grammar, rejects `CONTAINS TODAY`. Both still produce a positioned syntax error.
 
+### Grammar documentation in EBNF, checked against the parser
+`docs/query-language.md` gives the grammar as two `ebnf` blocks. The syntactic block is written over token names (`identifier`, `string`, `number`, keywords, punctuation), and a separate lexical block defines those tokens at the character level. EBNF uses `{ }` repetition where `grammar.y` needs left recursion, so the old rule-by-rule text comparison can no longer work.
+
+`grammar_doc_test.go` is replaced by a conformance test:
+- A small test-only reader parses the syntactic `ebnf` block (sequence `,`, alternation `|`, `[ ]`, `{ }`, `( )`, quoted terminals) into rules.
+- A backtracking recognizer matches token sequences from `lexFilter` against the `filter` rule. Lexical rule names in the syntactic block match token kinds.
+- A shared corpus of accepted and rejected filters must get the same verdict from the recognizer and from `filter.Parse`. The corpus is a table in the test and includes every example in the docs. Since the parser is now syntax-only, "accepted" means syntactically valid, so no semantic rule can make the two disagree.
+- The test fails with the filter on which the two disagree.
+
+The lexical block is documentation only. Lexer tests cover it.
+
+*Alternative:* keep goyacc notation in the docs. This was rejected because readers expect EBNF, and goyacc's left recursion and `t`-prefixed token names are parser implementation details.
+
+*Alternative:* generate the EBNF from `grammar.y`. This was rejected because a mechanical translation keeps the left recursion, so the result reads badly.
+
 ### Lexer brace mode
 `{` switches the lexer into expression mode until the matching `}`. In this mode, `+ - * / ( )` are operator tokens, numbers are unsigned, `::` is a token, and identifiers are units or keywords. Outside braces, scanning is unchanged, so `age > -3` still lexes `-3` as a number. A nested `{` is an error.
 

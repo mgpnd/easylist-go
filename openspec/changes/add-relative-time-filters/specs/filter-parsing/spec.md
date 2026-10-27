@@ -94,3 +94,14 @@ A duration SHALL be an unsigned integer literal followed by `::` and one of the 
 #### Scenario: Decimal amount
 - **WHEN** the filter `t > {NOW - 1.5::HOURS}` is parsed
 - **THEN** parsing fails with a syntax error at the position of `1.5`
+
+### Requirement: Grammar documented in EBNF
+The filter language reference, `easylist-filter/docs/query-language.md`, SHALL give the grammar in EBNF (ISO/IEC 14977 notation) in an `ebnf` code block over lexer tokens, with the lexical rules in a separate `ebnf` block. It SHALL NOT use goyacc notation. A test SHALL fail when the syntactic EBNF block and the parser disagree on any filter in a shared corpus of accepted and rejected inputs.
+
+#### Scenario: EBNF in the reference
+- **WHEN** a reader opens `docs/query-language.md`
+- **THEN** the grammar is written in EBNF, including brace expressions, durations, and relative time keywords
+
+#### Scenario: Documentation drift
+- **WHEN** `grammar.y` accepts a new operator that the documented EBNF does not derive
+- **THEN** the grammar documentation test fails, naming the filter that only one of them accepts

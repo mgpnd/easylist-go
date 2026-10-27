@@ -16,9 +16,10 @@ Saved views and dashboards need filters that move with the calendar, such as "cr
 - `<P>ExportInput` also gains an optional `asOf: Time`. When it is omitted, the resolver uses the server's current time.
 - `ExportRequest` gains `AsOf` (the moment relative values are evaluated) and `Timezone`. The worker calculates relative values at `AsOf`, so the file matches the list the user saw, however long the job waits in a queue.
 - `BETWEEN` keeps its single-string form and does not accept relative values.
+- The grammar in `easylist-filter/docs/query-language.md` is rewritten in EBNF instead of goyacc notation. The test that compared it rule by rule with `grammar.y` is replaced by one that checks the documented EBNF and the parser accept and reject the same filters.
 
 Modules touched:
-- `easylist-filter`: lexer brace mode, grammar, the expression literal kind and expression tree nodes, and docs. No evaluation.
+- `easylist-filter`: lexer brace mode, grammar, the expression literal kind and expression tree nodes, EBNF docs, and the grammar documentation test. No evaluation.
 - `easylist-core`: expression type-checking and evaluation in the planner, evaluated values on `Plan`; reference time and week start on `Request` and `Runtime`; `AsOf` and `Timezone` on `ExportRequest` and their validation; README.
 - `easylist-sql-goqu`: binding the plan's evaluated values, including whole-day comparisons for dates on timestamp fields; README.
 - `easylist-gqlgen`: the `timezone` input field in the generated SDL and Go glue, and passing it to core; README.
@@ -30,7 +31,7 @@ Modules touched:
 None.
 
 ### Modified Capabilities
-- `filter-parsing`: relative time keywords, brace expressions, duration syntax, and the rule that the parser does syntax only.
+- `filter-parsing`: relative time keywords, brace expressions, duration syntax, the rule that the parser does syntax only, and the grammar documented in EBNF.
 - `contract-filter-ast`: an expression literal kind and the expression tree nodes it exposes.
 - `contract-sql-driver`: the plan carries evaluated expression values; their conversion and whole-day comparison semantics.
 - `sql-goqu-compilation`: how relative values are bound for PostgreSQL.
