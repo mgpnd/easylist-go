@@ -95,6 +95,72 @@ func TestParseOperatorsAndLiterals(t *testing.T) {
 	}
 }
 
+// These tests cover NULL comparisons: the keyword is a value only for = and !=,
+// in any case, and a quoted "NULL" stays a field name.
+func TestParseNull(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		op    PredicateOp
+		opPos int
+		text  string
+		pos   int
+	}{
+		{`country = NULL`, OpEq, 9, "NULL", 11},
+		{`country != null`, OpNeq, 9, "null", 12},
+		{`country = Null`, OpEq, 9, "Null", 11},
+		{`country=NULL`, OpEq, 8, "NULL", 9},
+		{`country!=NULL`, OpNeq, 8, "NULL", 10},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			root, err := Parse(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, ok := root.(Predicate)
+			if !ok || p.Field() != "country" || p.FieldQuoted() || p.FieldPos() != 1 ||
+				p.Operator() != tc.op || p.OperatorPos() != tc.opPos ||
+				p.Value().Kind() != LiteralNull || p.Value().Text() != tc.text || p.Value().Pos() != tc.pos {
+				t.Fatalf("predicate: %#v", root)
+			}
+		})
+	}
+
+	root, err := Parse(`"NULL" = 'x'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := root.(Predicate)
+	if !ok || p.Field() != "NULL" || !p.FieldQuoted() || p.Operator() != OpEq || p.Value().Kind() != LiteralString || p.Value().Text() != "x" {
+		t.Fatalf("quoted NULL field: %#v", root)
+	}
+
+	root, err = Parse(`country = 'NULL'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok = root.(Predicate)
+	if !ok || p.Value().Kind() != LiteralString || p.Value().Text() != "NULL" || p.Value().Pos() != 11 {
+		t.Fatalf("NULL string: %#v", root)
+	}
+
+	root, err = Parse(`country = NULL OR country EXCLUDES 'fr'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top, ok := root.(Logical)
+	if !ok || top.Operator() != Or || top.OperatorPos() != 16 {
+		t.Fatalf("root: %#v", root)
+	}
+	left, ok := top.Left().(Predicate)
+	if !ok || left.Field() != "country" || left.Operator() != OpEq || left.Value().Kind() != LiteralNull {
+		t.Fatalf("left: %#v", top.Left())
+	}
+	right, ok := top.Right().(Predicate)
+	if !ok || right.Field() != "country" || right.Operator() != OpExcludes || right.Value().Kind() != LiteralString || right.Value().Text() != "fr" {
+		t.Fatalf("right: %#v", top.Right())
+	}
+}
+
 func TestParseGroupingAndAssociativity(t *testing.T) {
 	for _, tc := range []struct {
 		input      string
@@ -141,6 +207,10 @@ func TestParseSyntaxErrors(t *testing.T) {
 		{"missing = 1 AND", 16}, {"a = 1 @", 7}, {"a !=", 5}, {"a != AND b = 2", 6},
 		{"a = 1 != 2", 7}, {"!= 1", 1}, {"a ! 1", 3},
 		{"(a = 1))", 8}, {"(a = )", 6}, {"a = )", 5}, {"((a = 1) OR (b = 2", 13},
+		{"age > NULL", 7}, {"age >= NULL", 8}, {"age < NULL", 7}, {"age <= NULL", 8},
+		{"name CONTAINS NULL", 15}, {"name EXCLUDES NULL", 15}, {"age BETWEEN NULL", 13},
+		{"NULL = 'x'", 1}, {"null = NULL", 1}, {"a NULL", 3}, {"a = NULL NULL", 10},
+		{"a = 1 AND NULL", 11}, {"a = NULL AND", 13},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			root, err := Parse(tc.input)
@@ -182,6 +252,11 @@ func TestParseErrorMessages(t *testing.T) {
 		{"(a = 1))", "unmatched ')' at position 8"},
 		{"(a = 1 b = 2)", "unexpected field, expected AND, OR, or ')' at position 8"},
 		{"(a = 1 OR b = 2 c = 3)", "unexpected field, expected AND, OR, or ')' at position 17"},
+		{"age > NULL", "unexpected NULL, expected string, number, or boolean at position 7"},
+		{"name CONTAINS NULL", "unexpected NULL, expected string, number, or boolean at position 15"},
+		{"age BETWEEN NULL", "unexpected NULL, expected string at position 13"},
+		{"NULL = 'x'", "unexpected NULL, expected field or '(' at position 1"},
+		{"a = NULL NULL", "unexpected NULL at position 10"},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			_, err := Parse(tc.input)
@@ -193,10 +268,10 @@ func TestParseErrorMessages(t *testing.T) {
 }
 
 func TestYYCodesCoverAllTokenKinds(t *testing.T) {
-	if len(yyCodes) != int(tokNeq)+1 {
-		t.Fatalf("len(yyCodes) = %d, want %d", len(yyCodes), int(tokNeq)+1)
+	if len(yyCodes) != int(tokNull)+1 {
+		t.Fatalf("len(yyCodes) = %d, want %d", len(yyCodes), int(tokNull)+1)
 	}
-	for k := tokIdent; k <= tokNeq; k++ {
+	for k := tokIdent; k <= tokNull; k++ {
 		if yyCodes[k] == 0 {
 			t.Errorf("tokenKind %d has no parser code", k)
 		}

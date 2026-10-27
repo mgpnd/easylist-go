@@ -9,7 +9,7 @@ package filter
 	lit  Literal
 }
 
-%token <tok> tIDENT tSTRING tNUMBER tBOOL tNEQ tGTE tLTE tCONTAINS tEXCLUDES tBETWEEN tAND tOR '=' '>' '<' '(' ')'
+%token <tok> tIDENT tSTRING tNUMBER tBOOL tNEQ tGTE tLTE tCONTAINS tEXCLUDES tBETWEEN tAND tOR tNULL '=' '>' '<' '(' ')'
 
 %type <expr> or_expr and_expr primary predicate
 %type <op> ordinary_op
@@ -39,6 +39,8 @@ primary
 predicate
 	: tIDENT ordinary_op value { $$ = &predicateNode{field: $1, operator: $2.op, operatorPos: $2.pos, value: $3} }
 	| tIDENT tBETWEEN tSTRING  { $$ = &predicateNode{field: $1, operator: OpBetween, operatorPos: $2.pos, value: Literal{kind: LiteralString, text: $3.text, pos: $3.pos}} }
+	| tIDENT '=' tNULL         { $$ = &predicateNode{field: $1, operator: OpEq, operatorPos: $2.pos, value: Literal{kind: LiteralNull, text: $3.text, pos: $3.pos}} }
+	| tIDENT tNEQ tNULL        { $$ = &predicateNode{field: $1, operator: OpNeq, operatorPos: $2.pos, value: Literal{kind: LiteralNull, text: $3.text, pos: $3.pos}} }
 	;
 
 ordinary_op

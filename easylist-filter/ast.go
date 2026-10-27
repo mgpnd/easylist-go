@@ -60,6 +60,7 @@ const (
 	LiteralString LiteralKind = iota // A decoded single-quoted string.
 	LiteralNumber                    // A number with its exact source spelling.
 	LiteralBool                      // A Boolean with its source spelling.
+	LiteralNull                      // The NULL keyword with its source spelling.
 )
 
 // Literal is a read-only literal value. Positions are 1-based byte offsets.
@@ -72,7 +73,7 @@ type Literal struct {
 // Kind reports the literal's syntax kind.
 func (l Literal) Kind() LiteralKind { return l.kind }
 
-// Text returns decoded string text or the original numeric/Boolean spelling.
+// Text returns decoded string text or the original numeric, Boolean, or NULL spelling.
 func (l Literal) Text() string { return l.text }
 
 // Pos returns the literal's 1-based byte position in the input.

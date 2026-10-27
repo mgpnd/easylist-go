@@ -58,6 +58,10 @@ func TestLexFilterTokens(t *testing.T) {
 		{"mixed keywords", `contains ExClUdEs between true FaLsE`, []token{
 			{kind: tokContains, text: "contains", pos: 1}, {kind: tokExcludes, text: "ExClUdEs", pos: 10}, {kind: tokBetween, text: "between", pos: 19}, {kind: tokBool, text: "true", pos: 27}, {kind: tokBool, text: "FaLsE", pos: 32},
 		}},
+		{"null keyword", `NULL null Null "NULL" nullable`, []token{
+			{kind: tokNull, text: "NULL", pos: 1}, {kind: tokNull, text: "null", pos: 6}, {kind: tokNull, text: "Null", pos: 11},
+			{kind: tokIdent, text: "NULL", pos: 16, quoted: true}, {kind: tokIdent, text: "nullable", pos: 23},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

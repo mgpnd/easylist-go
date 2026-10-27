@@ -52,6 +52,7 @@ var yyCodes = [...]int{
 	tokEq: '=', tokGt: '>', tokGte: tGTE, tokLt: '<', tokLte: tLTE,
 	tokContains: tCONTAINS, tokExcludes: tEXCLUDES, tokBetween: tBETWEEN,
 	tokAnd: tAND, tokOr: tOR, tokLParen: '(', tokRParen: ')', tokNeq: tNEQ,
+	tokNull: tNULL,
 }
 
 // Lex implements yyLexer.
@@ -104,7 +105,7 @@ var tokenDisplay = map[string]string{
 	"$end": "end of input", "tIDENT": "field", "tSTRING": "string", "tNUMBER": "number",
 	"tBOOL": "boolean", "tNEQ": "'!='", "tGTE": "'>='", "tLTE": "'<='",
 	"tAND": "AND", "tOR": "OR", "tBETWEEN": "BETWEEN",
-	"tCONTAINS": "CONTAINS", "tEXCLUDES": "EXCLUDES",
+	"tCONTAINS": "CONTAINS", "tEXCLUDES": "EXCLUDES", "tNULL": "NULL",
 }
 
 // describeSyntaxError rewrites goyacc's verbose message, such as
