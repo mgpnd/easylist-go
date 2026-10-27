@@ -107,6 +107,10 @@ func TestGeneratedArrayCode(t *testing.T) {
 		"func (r *ArraysRow) CalcEnumOpt(ctx context.Context) ([]ArraysCalcEnumOpt, error) {",
 		"\tin := v.([]string)\n\tvar out []ArraysCalcEnum\n\tout = make([]ArraysCalcEnum, len(in))\n",
 		`NewEnum[ArraysSortField]("ArraysSortField", "id", "ID")` + "\n",
+		"type ArraysListInput struct {\n\tFilter *string\n\tSort []*ArraysSort\n\tLimit *int\n\tOffset *int\n\tTimezone *int\n}\n",
+		"\tFormat easylistgql.ExportFormat\n\tTimezone *int\n\tAsOf *time.Time\n}\n",
+		"\t\tTimezone: input.Timezone,\n\t})\n",
+		"\t\tTimezone: input.Timezone, AsOf: input.AsOf,\n\t})\n",
 	} {
 		if !strings.Contains(code, want) {
 			t.Errorf("generated code lacks %q", want)

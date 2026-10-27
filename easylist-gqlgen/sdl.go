@@ -112,7 +112,7 @@ func listSDL(l *easylist.CompiledList, s Scalars) string {
 	b.WriteString("}\n\n")
 
 	fmt.Fprintf(&b, "input %sSort {\n  field: %sSortField!\n  direction: SortDirection! = ASC\n}\n\n", p, p)
-	fmt.Fprintf(&b, "input %sListInput {\n  filter: String\n  sort: [%sSort!]\n  limit: Int\n  offset: Int\n}\n\n", p, p)
+	fmt.Fprintf(&b, "input %sListInput {\n  filter: String\n  sort: [%sSort!]\n  limit: Int\n  offset: Int\n%s}\n\n", p, p, timezoneSDL)
 
 	fmt.Fprintf(&b, "enum %sExportField {\n", p)
 	for _, f := range fields {
@@ -120,13 +120,37 @@ func listSDL(l *easylist.CompiledList, s Scalars) string {
 	}
 	b.WriteString("}\n\n")
 
-	fmt.Fprintf(&b, "input %sExportInput {\n  fields: [%sExportField!]!\n  filter: String\n  sort: [%sSort!]\n  format: ExportFormat!\n}\n", p, p, p)
+	fmt.Fprintf(&b, "input %sExportInput {\n  fields: [%sExportField!]!\n  filter: String\n  sort: [%sSort!]\n  format: ExportFormat!\n%s", p, p, p, timezoneSDL)
+	fmt.Fprintf(&b, asOfSDL+"}\n", s.Time)
 	return b.String()
 }
 
-// usedScalars returns the custom scalars some list field uses.
+// timezoneSDL is the documented timezone field of list and export inputs.
+const timezoneSDL = `  """
+  The client's UTC offset in minutes, positive east of UTC (UTC+02:00 is 120),
+  between -720 and 840. Relative time values such as TODAY are evaluated in
+  this zone. When omitted, the server's local time zone is used.
+  """
+  timezone: Int
+`
+
+// asOfSDL is the documented asOf field of export inputs, a format string
+// taking the timestamp scalar's name.
+const asOfSDL = `  """
+  The moment at which relative time values such as TODAY are evaluated. When
+  omitted, the server's current time is used.
+  """
+  asOf: %s
+`
+
+// usedScalars returns the custom scalars some list field uses, plus the
+// timestamp scalar whenever there is a list, because every export input has
+// asOf.
 func usedScalars(lists []*easylist.CompiledList, s Scalars) map[string]bool {
 	used := map[string]bool{}
+	if len(lists) > 0 {
+		used[s.Time] = true
+	}
 	for _, l := range lists {
 		for _, f := range l.Fields() {
 			if f.Type == easylist.Enum {

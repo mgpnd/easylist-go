@@ -26,6 +26,15 @@ const (
 	tokRParen
 	tokNeq
 	tokNull
+	tokLBrace // '{', which starts brace mode
+	tokRBrace // '}', which ends brace mode
+	tokPlus   // '+', inside braces only; outside it starts a number
+	tokMinus  // '-', inside braces only; outside it starts a number
+	tokStar   // '*'
+	tokSlash  // '/'
+	tokDColon // '::'
+
+	numTokenKinds
 )
 
 type token struct {
@@ -43,9 +52,16 @@ var keywords = map[string]tokenKind{
 
 // lexer scans filter syntax without interpreting predicates or value types.
 // It works on bytes, so positions are byte offsets even for UTF-8 input.
+//
+// A '{' switches it into brace mode until the next '}'. In brace mode,
+// + and - are operator tokens, numbers are unsigned, and every word is an
+// identifier, never a keyword such as AND. Outside braces, + and - start a
+// signed number. '*', '/', and '::' are tokens in both modes, so that the
+// parser, not the lexer, rejects them outside braces at their own position.
 type lexer struct {
-	src string
-	i   int // next byte to read
+	src   string
+	i     int  // next byte to read
+	brace bool // inside { }
 }
 
 // lexFilter returns all tokens, or no tokens if any byte is invalid.
@@ -73,13 +89,35 @@ func (l *lexer) scanToken() (token, error) {
 		return l.scanQuoted()
 	case isFilterIdentStart(ch):
 		return l.scanIdentifier(), nil
-	case isFilterDigit(ch) || ch == '+' || ch == '-':
+	case isFilterDigit(ch) || !l.brace && (ch == '+' || ch == '-'):
 		return l.scanNumber()
 	}
 
 	l.i++
 	var kind tokenKind
 	switch ch {
+	case '{':
+		if l.brace {
+			return token{}, fmt.Errorf("nested '{' at position %d", start+1)
+		}
+		l.brace = true
+		kind = tokLBrace
+	case '}':
+		l.brace = false
+		kind = tokRBrace
+	case '+': // only reached in brace mode
+		kind = tokPlus
+	case '-': // only reached in brace mode
+		kind = tokMinus
+	case '*':
+		kind = tokStar
+	case '/':
+		kind = tokSlash
+	case ':':
+		if !l.accept(':') {
+			return token{}, fmt.Errorf("expected ':' after ':' at position %d", start+1)
+		}
+		kind = tokDColon
 	case '=':
 		kind = tokEq
 	case '(':
@@ -134,22 +172,25 @@ func (l *lexer) scanQuoted() (token, error) {
 }
 
 // scanIdentifier reads a keyword or an unquoted identifier. Keywords keep
-// their source spelling; identifiers are folded like PostgreSQL does.
+// their source spelling; identifiers are folded like PostgreSQL does. Folding
+// keeps the length, so the source spelling is src[pos-1:pos-1+len(text)].
+// In brace mode every word is an identifier.
 func (l *lexer) scanIdentifier() token {
 	start := l.i
 	l.skipWhile(isFilterIdentByte)
 	word := l.src[start:l.i]
-	if kind, ok := keywords[strings.ToUpper(word)]; ok {
+	if kind, ok := keywords[strings.ToUpper(word)]; ok && !l.brace {
 		return token{kind: kind, text: word, pos: start + 1}
 	}
 	return token{kind: tokIdent, text: foldASCIILower(word), pos: start + 1}
 }
 
-// scanNumber reads an optionally signed integer or decimal. A name byte or dot
-// right after it is an error, so "1abc" or "1.2.3" cannot split into tokens.
+// scanNumber reads an integer or decimal, optionally signed outside braces. A
+// name byte or dot right after it is an error, so "1abc" or "1.2.3" cannot
+// split into tokens.
 func (l *lexer) scanNumber() (token, error) {
 	start := l.i
-	if !l.accept('+') {
+	if !l.brace && !l.accept('+') {
 		l.accept('-')
 	}
 	if !l.skipWhile(isFilterDigit) {

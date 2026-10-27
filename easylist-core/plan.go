@@ -3,6 +3,7 @@ package easylist
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	filter "github.com/mgpnd/easylist-go/easylist-filter"
 )
@@ -41,6 +42,14 @@ type Request struct {
 	// page plans, and rejected for export plans.
 	Limit  *int // Nil means the list's default page size.
 	Offset *int // Nil means 0.
+	// Now is the reference time for relative values such as TODAY, and its
+	// location is the time zone they are evaluated in. Planning a filter that
+	// uses a time keyword fails when Now is zero; Runtime.Fetch fills it from
+	// the runtime clock.
+	Now time.Time
+	// WeekStart is the first day of the week for START_OF_WEEK and
+	// END_OF_WEEK. Nil means Monday.
+	WeekStart *time.Weekday
 }
 
 // Plan is a dialect-neutral query description handed to a Driver. Plans are
@@ -63,6 +72,7 @@ type Plan struct {
 	Offset int
 
 	fields map[string]*Field
+	values map[filter.Predicate]Value // Evaluated expression literals.
 }
 
 // PlanJoin is one join clause of a plan.
@@ -99,6 +109,14 @@ func (p *Plan) Lookup(name string) (PlanField, bool) {
 	return planField(f), true
 }
 
+// Value returns the evaluated value of pred's expression literal, such as
+// TODAY or {100 * 3}. It reports false for a predicate whose value is not an
+// expression or that is not part of the plan's filter.
+func (p *Plan) Value(pred filter.Predicate) (Value, bool) {
+	v, ok := p.values[pred]
+	return v, ok
+}
+
 // Driver compiles plans into one SQL query and its bound arguments. Drivers
 // must emit list-author SQL verbatim, bind every request value, and be safe
 // for concurrent use.
@@ -113,7 +131,15 @@ func planField(f *Field) PlanField {
 // Plan validates req against the list and builds a plan of the given kind.
 // Every kind validates the whole request, so a request that plans as a page
 // also plans as a count.
+// Expression values are type-checked against their fields and evaluated at
+// req.Now; Plan never reads the system clock.
 func (c *CompiledList) Plan(kind Kind, req Request) (*Plan, error) {
+	return c.plan(kind, req, false)
+}
+
+// plan builds a plan. With typeOnly, expression values are type-checked but
+// times are not evaluated, so no reference time is needed.
+func (c *CompiledList) plan(kind Kind, req Request, typeOnly bool) (*Plan, error) {
 	selected := map[string]bool{c.def.PrimaryKey: true}
 	for _, name := range req.Fields {
 		f, ok := c.fields[name]
@@ -129,7 +155,14 @@ func (c *CompiledList) Plan(kind Kind, req Request) (*Plan, error) {
 		}
 	}
 
-	filtered, err := c.filterFields(req.Filter)
+	env := exprEnv{now: req.Now, weekStart: time.Monday, typeOnly: typeOnly}
+	if req.WeekStart != nil {
+		if *req.WeekStart < time.Sunday || *req.WeekStart > time.Saturday {
+			return nil, fmt.Errorf("invalid week start %d", *req.WeekStart)
+		}
+		env.weekStart = *req.WeekStart
+	}
+	filtered, values, err := c.filterFields(req.Filter, env)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +174,7 @@ func (c *CompiledList) Plan(kind Kind, req Request) (*Plan, error) {
 
 	p := &Plan{
 		Kind: kind, List: c.def.Name, Table: c.def.Table, Alias: c.def.Alias,
-		Scope: c.def.Scope, Filter: req.Filter, fields: c.fields,
+		Scope: c.def.Scope, Filter: req.Filter, fields: c.fields, values: values,
 	}
 	switch kind {
 	case KindPage, KindCount:
@@ -196,10 +229,12 @@ func (c *CompiledList) Plan(kind Kind, req Request) (*Plan, error) {
 	return p, nil
 }
 
-// filterFields validates every predicate field without recursion and returns
-// the set of filtered field names.
-func (c *CompiledList) filterFields(root filter.Expr) (map[string]bool, error) {
+// filterFields validates every predicate field without recursion, evaluates
+// every expression literal, and returns the set of filtered field names and
+// the values by predicate.
+func (c *CompiledList) filterFields(root filter.Expr, env exprEnv) (map[string]bool, map[filter.Predicate]Value, error) {
 	names := map[string]bool{}
+	var values map[filter.Predicate]Value
 	stack := []filter.Expr{}
 	if root != nil {
 		stack = append(stack, root)
@@ -211,20 +246,32 @@ func (c *CompiledList) filterFields(root filter.Expr) (map[string]bool, error) {
 		case filter.Predicate:
 			f, ok := c.fields[n.Field()]
 			if !ok {
-				return nil, fmt.Errorf("unknown field %q at position %d", n.Field(), n.FieldPos())
+				return nil, nil, fmt.Errorf("unknown field %q at position %d", n.Field(), n.FieldPos())
 			}
 			if f.calc != nil {
-				return nil, fmt.Errorf("cannot filter on calculated field %q at position %d", n.Field(), n.FieldPos())
+				return nil, nil, fmt.Errorf("cannot filter on calculated field %q at position %d", n.Field(), n.FieldPos())
 			}
 			names[f.Name] = true
+			if n.Value().Kind() == filter.LiteralExpr {
+				v, ok, err := exprValue(n, f, env)
+				if err != nil {
+					return nil, nil, err
+				}
+				if ok {
+					if values == nil {
+						values = map[filter.Predicate]Value{}
+					}
+					values[n] = v
+				}
+			}
 		case filter.Logical:
 			// Push right first so fields are checked left to right.
 			stack = append(stack, n.Right(), n.Left())
 		default:
-			return nil, fmt.Errorf("invalid filter syntax tree")
+			return nil, nil, fmt.Errorf("invalid filter syntax tree")
 		}
 	}
-	return names, nil
+	return names, values, nil
 }
 
 func (c *CompiledList) order(sorts []Sort) ([]PlanOrder, error) {

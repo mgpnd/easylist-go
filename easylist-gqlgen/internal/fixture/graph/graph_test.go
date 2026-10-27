@@ -16,6 +16,7 @@ import (
 	"time"
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
+	filter "github.com/mgpnd/easylist-go/easylist-filter"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
@@ -311,6 +312,7 @@ func TestExportMutation(t *testing.T) {
 
 	t.Run("accepted", func(t *testing.T) {
 		rt, db := newRuntime()
+		rt.Clock = fixedClock(created)
 		exp := &recordingExporter{id: "job-42"}
 		rt.Exporter = exp
 		resp := run(t, rt, fmt.Sprintf(mutation, "name CONTAINS 'a'"))
@@ -319,7 +321,7 @@ func TestExportMutation(t *testing.T) {
 		}
 		want := easylist.ExportRequest{
 			List: "users", Fields: []string{"name", "display"}, Filter: "name CONTAINS 'a'",
-			Sort: []easylist.Sort{{Field: "name", Direction: easylist.Desc}}, Format: easylist.XLSX,
+			Sort: []easylist.Sort{{Field: "name", Direction: easylist.Desc}}, Format: easylist.XLSX, AsOf: created,
 		}
 		if len(exp.got) != 1 || !reflect.DeepEqual(exp.got[0], want) {
 			t.Errorf("exporter got %+v", exp.got)
@@ -353,6 +355,155 @@ func TestExportMutation(t *testing.T) {
 		resp := run(t, rt, fmt.Sprintf(mutation, ""))
 		if len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0].Message, "exports are not configured") {
 			t.Fatalf("errors = %+v", resp.Errors)
+		}
+	})
+}
+
+// planDriver is a fakeDriver that also records the plans it compiles.
+type planDriver struct {
+	fakeDriver
+	plans []*easylist.Plan
+}
+
+func (d *planDriver) Compile(p *easylist.Plan) (string, []any, error) {
+	d.plans = append(d.plans, p)
+	return d.fakeDriver.Compile(p)
+}
+
+func fixedClock(t time.Time) func() time.Time { return func() time.Time { return t } }
+
+func TestListTimezone(t *testing.T) {
+	clock := time.Date(2026, 10, 28, 2, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name, input string
+		want        time.Time
+	}{
+		{"client time zone", `{filter: "created_at = TODAY", timezone: -300}`,
+			time.Date(2026, 10, 27, 0, 0, 0, 0, time.FixedZone("", -300*60))},
+		{"UTC+14:00", `{filter: "created_at = TODAY", timezone: 840}`,
+			time.Date(2026, 10, 28, 0, 0, 0, 0, time.FixedZone("", 840*60))},
+		{"no timezone uses the runtime clock's zone", `{filter: "created_at = TODAY"}`,
+			time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			drv := &planDriver{}
+			db := &fakeDB{}
+			rt := &easylist.Runtime{Driver: drv, DB: db, Clock: fixedClock(clock)}
+			resp := run(t, rt, `{ people(query: `+tc.input+`) { items { id } } }`)
+			if len(resp.Errors) > 0 {
+				t.Fatalf("errors: %+v", resp.Errors)
+			}
+			if len(drv.plans) != 1 {
+				t.Fatalf("compiled %d plans, want 1", len(drv.plans))
+			}
+			pred, ok := drv.plans[0].Filter.(filter.Predicate)
+			if !ok {
+				t.Fatalf("filter = %#v", drv.plans[0].Filter)
+			}
+			v, ok := drv.plans[0].Value(pred)
+			if !ok || v.Kind != easylist.ValueDate || !v.Time.Equal(tc.want) {
+				t.Fatalf("TODAY = %+v (%v), want date %v", v, ok, tc.want)
+			}
+			_, gotOff := v.Time.Zone()
+			_, wantOff := tc.want.Zone()
+			if gotOff != wantOff {
+				t.Errorf("TODAY zone offset = %d, want %d", gotOff, wantOff)
+			}
+		})
+	}
+
+	t.Run("timezone out of range", func(t *testing.T) {
+		for _, tz := range []string{"-800", "-721", "841"} {
+			rt, db := newRuntime()
+			rt.Clock = fixedClock(clock)
+			resp := run(t, rt, `{ people(query: {filter: "created_at = TODAY", timezone: `+tz+`}) { totalCount items { id } } }`)
+			if len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0].Message, "between -720 and 840") {
+				t.Fatalf("timezone %s: errors = %+v", tz, resp.Errors)
+			}
+			if !reflect.DeepEqual(resp.Errors[0].Path, []any{"people"}) {
+				t.Errorf("path = %v", resp.Errors[0].Path)
+			}
+			if len(db.queries) != 0 {
+				t.Errorf("queries ran: %q", db.queries)
+			}
+		}
+	})
+}
+
+func TestExportRequestMoment(t *testing.T) {
+	const mutation = `mutation { exportPeople(input: {fields: [NAME], filter: "created_at >= TODAY", format: CSV%s}) { id } }`
+	tz := func(m int) *int { return &m }
+	plus2 := time.FixedZone("", 2*60*60)
+	cases := []struct {
+		name, args string
+		clock      time.Time
+		wantAsOf   time.Time
+		wantTZ     *int
+	}{
+		{"request moment defaults to server time", ", timezone: 120", time.Date(2026, 10, 27, 10, 0, 0, 0, plus2),
+			time.Date(2026, 10, 27, 8, 0, 0, 0, time.UTC), tz(120)},
+		{"client-supplied asOf", `, asOf: "2026-10-01T09:00:00+02:00"`, time.Date(2026, 10, 27, 10, 0, 0, 0, plus2),
+			time.Date(2026, 10, 1, 7, 0, 0, 0, time.UTC), nil},
+		{"asOf and timezone", `, asOf: "2026-10-01T09:00:00+02:00", timezone: -300`, time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, 10, 1, 7, 0, 0, 0, time.UTC), tz(-300)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, _ := newRuntime()
+			rt.Clock = fixedClock(tc.clock)
+			exp := &recordingExporter{id: "job-1"}
+			rt.Exporter = exp
+			resp := run(t, rt, fmt.Sprintf(mutation, tc.args))
+			if len(resp.Errors) > 0 {
+				t.Fatalf("errors: %+v", resp.Errors)
+			}
+			if len(exp.got) != 1 {
+				t.Fatalf("exporter calls = %d", len(exp.got))
+			}
+			got := exp.got[0]
+			if got.AsOf != tc.wantAsOf || got.AsOf.Location() != time.UTC {
+				t.Errorf("AsOf = %v, want %v", got.AsOf, tc.wantAsOf)
+			}
+			if !reflect.DeepEqual(got.Timezone, tc.wantTZ) {
+				t.Errorf("Timezone = %v, want %v", got.Timezone, tc.wantTZ)
+			}
+		})
+	}
+
+	t.Run("system clock survives a JSON round trip", func(t *testing.T) {
+		rt, _ := newRuntime()
+		exp := &recordingExporter{id: "job-1"}
+		rt.Exporter = exp
+		before := time.Now()
+		resp := run(t, rt, fmt.Sprintf(mutation, ""))
+		if len(resp.Errors) > 0 || len(exp.got) != 1 {
+			t.Fatalf("errors = %+v, exporter calls = %d", resp.Errors, len(exp.got))
+		}
+		got := exp.got[0]
+		if got.AsOf.Before(before.Add(-time.Second)) || got.AsOf.After(time.Now()) {
+			t.Errorf("AsOf = %v, want about %v", got.AsOf, before)
+		}
+		data, err := json.Marshal(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back easylist.ExportRequest
+		if err := json.Unmarshal(data, &back); err != nil {
+			t.Fatal(err)
+		}
+		if back.AsOf != got.AsOf {
+			t.Errorf("AsOf after round trip = %v, want %v", back.AsOf, got.AsOf)
+		}
+	})
+
+	t.Run("timezone out of range", func(t *testing.T) {
+		rt, _ := newRuntime()
+		exp := &recordingExporter{id: "job-1"}
+		rt.Exporter = exp
+		resp := run(t, rt, fmt.Sprintf(mutation, ", timezone: -800"))
+		if len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0].Message, "between -720 and 840") || len(exp.got) != 0 {
+			t.Fatalf("errors = %+v, exporter calls = %d", resp.Errors, len(exp.got))
 		}
 	})
 }

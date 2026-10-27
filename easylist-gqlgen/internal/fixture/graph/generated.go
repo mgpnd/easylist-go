@@ -2687,7 +2687,7 @@ func (ec *executionContext) unmarshalInputOrderItemsExportInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"fields", "filter", "sort", "format"}
+	fieldsInOrder := [...]string{"fields", "filter", "sort", "format", "timezone", "asOf"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -2722,6 +2722,20 @@ func (ec *executionContext) unmarshalInputOrderItemsExportInput(ctx context.Cont
 				return it, err
 			}
 			it.Format = data
+		case "timezone":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("timezone"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Timezone = data
+		case "asOf":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("asOf"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AsOf = data
 		}
 	}
 	return it, nil
@@ -2738,7 +2752,7 @@ func (ec *executionContext) unmarshalInputOrderItemsListInput(ctx context.Contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"filter", "sort", "limit", "offset"}
+	fieldsInOrder := [...]string{"filter", "sort", "limit", "offset", "timezone"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -2773,6 +2787,13 @@ func (ec *executionContext) unmarshalInputOrderItemsListInput(ctx context.Contex
 				return it, err
 			}
 			it.Offset = data
+		case "timezone":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("timezone"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Timezone = data
 		}
 	}
 	return it, nil
@@ -2830,7 +2851,7 @@ func (ec *executionContext) unmarshalInputUsersExportInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"fields", "filter", "sort", "format"}
+	fieldsInOrder := [...]string{"fields", "filter", "sort", "format", "timezone", "asOf"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -2865,6 +2886,20 @@ func (ec *executionContext) unmarshalInputUsersExportInput(ctx context.Context, 
 				return it, err
 			}
 			it.Format = data
+		case "timezone":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("timezone"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Timezone = data
+		case "asOf":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("asOf"))
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AsOf = data
 		}
 	}
 	return it, nil
@@ -2881,7 +2916,7 @@ func (ec *executionContext) unmarshalInputUsersListInput(ctx context.Context, ob
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"filter", "sort", "limit", "offset"}
+	fieldsInOrder := [...]string{"filter", "sort", "limit", "offset", "timezone"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -2916,6 +2951,13 @@ func (ec *executionContext) unmarshalInputUsersListInput(ctx context.Context, ob
 				return it, err
 			}
 			it.Offset = data
+		case "timezone":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("timezone"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Timezone = data
 		}
 	}
 	return it, nil
@@ -4769,6 +4811,24 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = sel
 	_ = ctx
 	res := graphql.MarshalString(*v)
+	return res
+}
+
+func (ec *executionContext) unmarshalOTime2ᚖtimeᚐTime(ctx context.Context, v any) (*time.Time, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalTime(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel ast.SelectionSet, v *time.Time) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalTime(*v)
 	return res
 }
 

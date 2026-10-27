@@ -193,25 +193,35 @@ func TestParseGroupingAndAssociativity(t *testing.T) {
 	}
 }
 
+var syntaxErrorCases = []struct {
+	input string
+	pos   int
+}{
+	{"", 1}, {"   ", 4}, {"a", 2}, {"a =", 4}, {"a = AND b = 2", 5}, {"a 1", 3},
+	{"a = 1 b = 2", 7}, {"AND a = 1", 1}, {"OR a = 1", 1}, {"a = 1 AND", 10},
+	{"a = 1 OR", 9}, {"a = 1 AND OR b = 2", 11}, {"()", 2}, {"(a = 1", 1},
+	{"a = 1)", 6}, {"(a = 1 OR)", 10}, {"a = 1 (b = 2)", 7}, {"(a = 1)(b = 2)", 8},
+	{"age BETWEEN 1", 13}, {"a BETWEEN 1", 11}, {"a BETWEEN 1 AND 2", 11}, {"a = 1 AND (", 11},
+	{"a = 1 OR (b = 2", 10}, {"\"é\" 1", 6}, {"a = 'unterminated", 5},
+	{"missing = 1 AND", 16}, {"a = 1 @", 7}, {"a !=", 5}, {"a != AND b = 2", 6},
+	{"a = 1 != 2", 7}, {"!= 1", 1}, {"a ! 1", 3},
+	{"(a = 1))", 8}, {"(a = )", 6}, {"a = )", 5}, {"((a = 1) OR (b = 2", 13},
+	{"age > NULL", 7}, {"age >= NULL", 8}, {"age < NULL", 7}, {"age <= NULL", 8},
+	{"name CONTAINS NULL", 15}, {"name EXCLUDES NULL", 15}, {"age BETWEEN NULL", 13},
+	{"NULL = 'x'", 1}, {"null = NULL", 1}, {"a NULL", 3}, {"a = NULL NULL", 10},
+	{"a = 1 AND NULL", 11}, {"a = NULL AND", 13},
+	{"name CONTAINS TODAY", 15}, {"name EXCLUDES TODAY", 15}, {"due BETWEEN TODAY", 13},
+	{"name CONTAINS {TODAY}", 15}, {"due BETWEEN {TODAY}", 13}, {"due = tomorrow", 7},
+	{"due > {TODAY + 5::DAYS", 23}, {"due > {}", 8}, {"due > TODAY + 5::DAYS", 13},
+	{"due > TODAY +5::DAYS", 13}, {"due > {{TODAY}}", 8}, {"t > {NOW - 3::WEEKS}", 15},
+	{"t > {NOW - 1.5::HOURS}", 12}, {"TODAY", 6}, {"{TODAY} = 1", 1}, {"a = {1} + 2", 9},
+	{"a = {1}}", 8}, {"a = {1 2}", 8}, {"a = {1 + * 2}", 10}, {"a = {()}", 7},
+	{"a = {1::DAYS::DAYS}", 13}, {"a = {DAYS::1}", 6}, {"a = {TODAY::DAYS}", 11},
+	{"a = {NULL}", 6}, {"a = {TRUE}", 6}, {"a = {AND}", 6}, {"a = {1 = 2}", 8},
+}
+
 func TestParseSyntaxErrors(t *testing.T) {
-	for _, tc := range []struct {
-		input string
-		pos   int
-	}{
-		{"", 1}, {"   ", 4}, {"a", 2}, {"a =", 4}, {"a = AND b = 2", 5}, {"a 1", 3},
-		{"a = 1 b = 2", 7}, {"AND a = 1", 1}, {"OR a = 1", 1}, {"a = 1 AND", 10},
-		{"a = 1 OR", 9}, {"a = 1 AND OR b = 2", 11}, {"()", 2}, {"(a = 1", 1},
-		{"a = 1)", 6}, {"(a = 1 OR)", 10}, {"a = 1 (b = 2)", 7}, {"(a = 1)(b = 2)", 8},
-		{"age BETWEEN 1", 13}, {"a BETWEEN 1", 11}, {"a BETWEEN 1 AND 2", 11}, {"a = 1 AND (", 11},
-		{"a = 1 OR (b = 2", 10}, {"\"é\" 1", 6}, {"a = 'unterminated", 5},
-		{"missing = 1 AND", 16}, {"a = 1 @", 7}, {"a !=", 5}, {"a != AND b = 2", 6},
-		{"a = 1 != 2", 7}, {"!= 1", 1}, {"a ! 1", 3},
-		{"(a = 1))", 8}, {"(a = )", 6}, {"a = )", 5}, {"((a = 1) OR (b = 2", 13},
-		{"age > NULL", 7}, {"age >= NULL", 8}, {"age < NULL", 7}, {"age <= NULL", 8},
-		{"name CONTAINS NULL", 15}, {"name EXCLUDES NULL", 15}, {"age BETWEEN NULL", 13},
-		{"NULL = 'x'", 1}, {"null = NULL", 1}, {"a NULL", 3}, {"a = NULL NULL", 10},
-		{"a = 1 AND NULL", 11}, {"a = NULL AND", 13},
-	} {
+	for _, tc := range syntaxErrorCases {
 		t.Run(tc.input, func(t *testing.T) {
 			root, err := Parse(tc.input)
 			if root != nil || err == nil || !strings.HasSuffix(err.Error(), fmt.Sprintf("position %d", tc.pos)) {
@@ -231,33 +241,60 @@ func TestParseLexerErrorWinsOverSyntaxError(t *testing.T) {
 // The first rows mirror the error table in docs/parser.md, which is maintained
 // by hand and must be updated together with them. The rest are edge cases
 // around parentheses and expected-token lists.
+var errorMessageCases = []struct{ input, want string }{
+	{"", "unexpected end of input, expected field or '(' at position 1"},
+	{"a 1", "unexpected number at position 3"},
+	{"a =", "unexpected end of input, expected string, number, boolean, NULL, time keyword, or '{' at position 4"},
+	{"a BETWEEN 1", "unexpected number, expected string at position 11"},
+	{"(a = 1 OR)", "unexpected ')', expected field or '(' at position 10"},
+	{"a = 1 b = 2", "unexpected field at position 7"},
+	{"a = 1)", "unmatched ')' at position 6"},
+	{"a = 1 AND (", "unmatched '(' at position 11"},
+	{"((a = 1) OR (b = 2", "unmatched '(' at position 13"},
+	{"a = 'x", "unterminated quote at position 5"},
+	{"1abc = 1", "invalid number at position 2"},
+	{"a = 1 @", "unexpected character '@' at position 7"},
+	{"AND a = 1", "unexpected AND, expected field or '(' at position 1"},
+	{"a = 1 != 2", "unexpected '!=' at position 7"},
+	{"a = )", "unmatched ')' at position 5"},
+	{"(a = )", "unexpected ')', expected string, number, boolean, NULL, time keyword, or '{' at position 6"},
+	{"(a = 1))", "unmatched ')' at position 8"},
+	{"(a = 1 b = 2)", "unexpected field, expected AND, OR, or ')' at position 8"},
+	{"(a = 1 OR b = 2 c = 3)", "unexpected field, expected AND, OR, or ')' at position 17"},
+	{"age > NULL", "unexpected NULL, expected string, number, boolean, time keyword, or '{' at position 7"},
+	{"name CONTAINS NULL", "unexpected NULL, expected string, number, or boolean at position 15"},
+	{"age BETWEEN NULL", "unexpected NULL, expected string at position 13"},
+	{"NULL = 'x'", "unexpected NULL, expected field or '(' at position 1"},
+	{"a = NULL NULL", "unexpected NULL at position 10"},
+	{"due = tomorrow", "unknown time keyword 'tomorrow' at position 7"},
+	{"due = {TOMORROW}", "unknown time keyword 'TOMORROW' at position 8"},
+	{`due = "today"`, "unexpected quoted identifier at position 7"},
+	{`due = {"today"}`, "unexpected quoted identifier at position 8"},
+	{"name CONTAINS TODAY", "unexpected identifier, expected string, number, or boolean at position 15"},
+	{"name EXCLUDES {1}", "unexpected '{', expected string, number, or boolean at position 15"},
+	{"due BETWEEN TODAY", "unexpected identifier, expected string at position 13"},
+	{"due BETWEEN {TODAY}", "unexpected '{', expected string at position 13"},
+	{"due > {TODAY + 5::DAYS", "unexpected end of input, expected '}', '+', '-', '*', or '/' at position 23"},
+	{"due > {}", "unexpected '}', expected time keyword, number, '(', or '-' at position 8"},
+	{"due > {TODAY +}", "unexpected '}', expected time keyword, number, '(', or '-' at position 15"},
+	{"due > {TODAY NOW}", "unexpected time keyword, expected '}', '+', '-', '*', or '/' at position 14"},
+	{"due > {(TODAY}", "unexpected '}', expected ')', '+', '-', '*', or '/' at position 14"},
+	{"due > {(TODAY", "unmatched '(' at position 8"},
+	{"due > {TODAY)}", "unmatched ')' at position 13"},
+	{"due > {'x'}", "unexpected string, expected time keyword, number, '(', or '-' at position 8"},
+	{"due > {{TODAY}}", "nested '{' at position 8"},
+	{"due > TODAY + 5::DAYS", "invalid number at position 13"},
+	{"due > TODAY * 2", "unexpected '*' at position 13"},
+	{"due > 5::DAYS", "unexpected '::' at position 8"},
+	{"due > TODAY}", "unexpected '}' at position 12"},
+	{"t > {NOW - 3::WEEKS}", "unknown duration unit 'WEEKS', expected DAYS, BUSINESS_DAYS, HOURS, or MINUTES at position 15"},
+	{"t > {NOW - 3::5}", "unexpected number, expected unit at position 15"},
+	{"t > {NOW - 3:HOURS}", "expected ':' after ':' at position 13"},
+	{"t > {NOW - 1.5::HOURS}", "duration amount 1.5 is not a whole number at position 12"},
+}
+
 func TestParseErrorMessages(t *testing.T) {
-	for _, tc := range []struct{ input, want string }{
-		{"", "unexpected end of input, expected field or '(' at position 1"},
-		{"a 1", "unexpected number at position 3"},
-		{"a =", "unexpected end of input, expected string, number, or boolean at position 4"},
-		{"a BETWEEN 1", "unexpected number, expected string at position 11"},
-		{"(a = 1 OR)", "unexpected ')', expected field or '(' at position 10"},
-		{"a = 1 b = 2", "unexpected field at position 7"},
-		{"a = 1)", "unmatched ')' at position 6"},
-		{"a = 1 AND (", "unmatched '(' at position 11"},
-		{"((a = 1) OR (b = 2", "unmatched '(' at position 13"},
-		{"a = 'x", "unterminated quote at position 5"},
-		{"1abc = 1", "invalid number at position 2"},
-		{"a = 1 @", "unexpected character '@' at position 7"},
-		{"AND a = 1", "unexpected AND, expected field or '(' at position 1"},
-		{"a = 1 != 2", "unexpected '!=' at position 7"},
-		{"a = )", "unmatched ')' at position 5"},
-		{"(a = )", "unexpected ')', expected string, number, or boolean at position 6"},
-		{"(a = 1))", "unmatched ')' at position 8"},
-		{"(a = 1 b = 2)", "unexpected field, expected AND, OR, or ')' at position 8"},
-		{"(a = 1 OR b = 2 c = 3)", "unexpected field, expected AND, OR, or ')' at position 17"},
-		{"age > NULL", "unexpected NULL, expected string, number, or boolean at position 7"},
-		{"name CONTAINS NULL", "unexpected NULL, expected string, number, or boolean at position 15"},
-		{"age BETWEEN NULL", "unexpected NULL, expected string at position 13"},
-		{"NULL = 'x'", "unexpected NULL, expected field or '(' at position 1"},
-		{"a = NULL NULL", "unexpected NULL at position 10"},
-	} {
+	for _, tc := range errorMessageCases {
 		t.Run(tc.input, func(t *testing.T) {
 			_, err := Parse(tc.input)
 			if err == nil || err.Error() != tc.want || strings.Contains(err.Error(), "\n") {
@@ -268,10 +305,10 @@ func TestParseErrorMessages(t *testing.T) {
 }
 
 func TestYYCodesCoverAllTokenKinds(t *testing.T) {
-	if len(yyCodes) != int(tokNull)+1 {
-		t.Fatalf("len(yyCodes) = %d, want %d", len(yyCodes), int(tokNull)+1)
+	if len(yyCodes) != int(numTokenKinds) {
+		t.Fatalf("len(yyCodes) = %d, want %d", len(yyCodes), int(numTokenKinds))
 	}
-	for k := tokIdent; k <= tokNull; k++ {
+	for k := tokIdent; k < numTokenKinds; k++ {
 		if yyCodes[k] == 0 {
 			t.Errorf("tokenKind %d has no parser code", k)
 		}
@@ -347,5 +384,273 @@ func TestParseDepthAndIdentifiers(t *testing.T) {
 		if !ok || p.Field() != tc.want {
 			t.Fatalf("identifier: %#v", root)
 		}
+	}
+}
+
+// dumpExpr renders an expression tree with positions: numbers as 2@13,
+// keywords as TODAY"today"@7, durations as 7::DAYS"DAYS"@17/20 (amount and
+// unit positions), binary nodes as (*@15 left right), and negations as
+// (neg@9 operand).
+func dumpExpr(n ExprNode) string {
+	switch n := n.(type) {
+	case NumberNode:
+		return fmt.Sprintf("%s@%d", n.Text(), n.Pos())
+	case KeywordNode:
+		return fmt.Sprintf("%s%q@%d", n.Keyword(), n.Text(), n.Pos())
+	case DurationNode:
+		return fmt.Sprintf("%s::%s@%d/%d", n.Amount(), n.Unit(), n.Pos(), n.UnitPos())
+	case BinaryNode:
+		return fmt.Sprintf("(%s@%d %s %s)", n.Operator(), n.Pos(), dumpExpr(n.Left()), dumpExpr(n.Right()))
+	case NegationNode:
+		return fmt.Sprintf("(neg@%d %s)", n.Pos(), dumpExpr(n.Operand()))
+	}
+	return fmt.Sprintf("unknown %T", n)
+}
+
+// parseExprValue parses a single predicate and returns its expression value.
+func parseExprValue(t *testing.T, input string) (Predicate, Literal) {
+	t.Helper()
+	root, err := Parse(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := root.(Predicate)
+	if !ok {
+		t.Fatalf("root: %#v", root)
+	}
+	v := p.Value()
+	if v.Kind() != LiteralExpr || v.Expr() == nil {
+		t.Fatalf("value kind %d, expr %v; want an expression", v.Kind(), v.Expr())
+	}
+	return p, v
+}
+
+// These tests pin tree shapes and positions: precedence, association,
+// parentheses, negation, and the absence of folding or type checking.
+var expressionTreeCases = []struct{ input, text, tree string }{
+	// filter-parsing scenarios.
+	{`t > {NOW - TODAY}`, `{NOW - TODAY}`, `(-@10 NOW"NOW"@6 TODAY"TODAY"@12)`},
+	{`price > {1 / 0}`, `{1 / 0}`, `(/@12 1@10 0@14)`},
+	{`due > {5::DAYS}`, `{5::DAYS}`, `5::DAYS@8/11`},
+	{`due_date > {today + 5::days}`, `{today + 5::days}`, `(+@19 TODAY"today"@13 5::DAYS@21/24)`},
+	{`due = {TODAY + 2 * 7::DAYS}`, `{TODAY + 2 * 7::DAYS}`, `(+@14 TODAY"TODAY"@8 (*@18 2@16 7::DAYS@20/23))`},
+	{`due = {TODAY+5::DAYS}`, `{TODAY+5::DAYS}`, `(+@13 TODAY"TODAY"@8 5::DAYS@14/17)`},
+	{`due = {TODAY + 5::DAYS}`, `{TODAY + 5::DAYS}`, `(+@14 TODAY"TODAY"@8 5::DAYS@16/19)`},
+	{`t > {NOW - 30::minutes}`, `{NOW - 30::minutes}`, `(-@10 NOW"NOW"@6 30::MINUTES@12/16)`},
+	// contract-filter-ast scenarios.
+	{`price > {100 * 3}`, `{100 * 3}`, `(*@14 100@10 3@16)`},
+	{`delta > {-1.50 * 2}`, `{-1.50 * 2}`, `(*@16 (neg@10 1.50@11) 2@18)`},
+	{`t > {NOW + (1::DAYS + 2::HOURS)}`, `{NOW + (1::DAYS + 2::HOURS)}`, `(+@10 NOW"NOW"@6 (+@21 1::DAYS@13/16 2::HOURS@23/26))`},
+	// Association, parentheses, and negation.
+	{`a = {1 - 2 - 3}`, `{1 - 2 - 3}`, `(-@12 (-@8 1@6 2@10) 3@14)`},
+	{`a = {8 / 4 * 2}`, `{8 / 4 * 2}`, `(*@12 (/@8 8@6 4@10) 2@14)`},
+	{`a = {1 - (2 - 3)}`, `{1 - (2 - 3)}`, `(-@8 1@6 (-@13 2@11 3@15))`},
+	{`a = {1 + 2 * 3 - 4 / 5}`, `{1 + 2 * 3 - 4 / 5}`, `(-@16 (+@8 1@6 (*@12 2@10 3@14)) (/@20 4@18 5@22))`},
+	{`a = {--1}`, `{--1}`, `(neg@6 (neg@7 1@8))`},
+	{`a = {-(1 + 2)}`, `{-(1 + 2)}`, `(neg@6 (+@10 1@8 2@12))`},
+	{`a = {-5::DAYS * 2}`, `{-5::DAYS * 2}`, `(*@15 (neg@6 5::DAYS@7/10) 2@17)`},
+	{`a = {2 - -3}`, `{2 - -3}`, `(-@8 2@6 (neg@10 3@11))`},
+	{`a = {((TODAY))}`, `{((TODAY))}`, `TODAY"TODAY"@8`},
+	{`a = {007.50}`, `{007.50}`, `007.50@6`},
+	// No size limit, and every keyword and unit in any case.
+	{`a = {TODAY + 99999999999999999999::DAYS}`, `{TODAY + 99999999999999999999::DAYS}`, `(+@12 TODAY"TODAY"@6 99999999999999999999::DAYS@14/36)`},
+	{`a = {0::Business_Days + 1::HOURS}`, `{0::Business_Days + 1::HOURS}`, `(+@23 0::BUSINESS_DAYS@6/9 1::HOURS@25/28)`},
+	{`a = {start_of_week + End_Of_Week}`, `{start_of_week + End_Of_Week}`, `(+@20 START_OF_WEEK"start_of_week"@6 END_OF_WEEK"End_Of_Week"@22)`},
+	{`a = {START_OF_MONTH-END_OF_MONTH}`, `{START_OF_MONTH-END_OF_MONTH}`, `(-@20 START_OF_MONTH"START_OF_MONTH"@6 END_OF_MONTH"END_OF_MONTH"@21)`},
+	{`a = {start_of_year*end_of_year}`, `{start_of_year*end_of_year}`, `(*@19 START_OF_YEAR"start_of_year"@6 END_OF_YEAR"end_of_year"@20)`},
+	{"a = {\tNOW\n}", "{\tNOW\n}", `NOW"NOW"@7`},
+}
+
+func TestParseExpressionTrees(t *testing.T) {
+	for _, tc := range expressionTreeCases {
+		t.Run(tc.input, func(t *testing.T) {
+			_, v := parseExprValue(t, tc.input)
+			if v.Text() != tc.text || v.Pos() != strings.Index(tc.input, "{")+1 {
+				t.Errorf("text %q at %d, want %q at %d", v.Text(), v.Pos(), tc.text, strings.Index(tc.input, "{")+1)
+			}
+			if got := dumpExpr(v.Expr()); got != tc.tree {
+				t.Errorf("tree\n got %s\nwant %s", got, tc.tree)
+			}
+		})
+	}
+}
+
+func TestParseExpressionLiterals(t *testing.T) {
+	// Brace expression literal.
+	p, v := parseExprValue(t, `due > {today + 5::days}`)
+	if p.Field() != "due" || p.Operator() != OpGt || v.Text() != "{today + 5::days}" || v.Pos() != 7 {
+		t.Fatalf("brace literal: %q %d %q %d", p.Field(), p.Operator(), v.Text(), v.Pos())
+	}
+	if b, ok := v.Expr().(BinaryNode); !ok || b.Operator() != ArithAdd {
+		t.Fatalf("root: %s", dumpExpr(v.Expr()))
+	}
+
+	// Bare keyword literals keep their spelling, in any case.
+	for _, tc := range []struct{ input, text string }{
+		{`due = TODAY`, "TODAY"}, {`due = today`, "today"}, {`due = Today`, "Today"}, {`due=TODAY`, "TODAY"},
+	} {
+		p, v := parseExprValue(t, tc.input)
+		k, ok := v.Expr().(KeywordNode)
+		pos := strings.Index(tc.input, tc.text) + 1
+		if !ok || k.Keyword() != TimeToday || k.Text() != tc.text || k.Pos() != pos ||
+			v.Text() != tc.text || v.Pos() != pos || p.Field() != "due" || p.Operator() != OpEq {
+			t.Fatalf("%s: literal %q@%d, root %s", tc.input, v.Text(), v.Pos(), dumpExpr(v.Expr()))
+		}
+	}
+
+	// Every comparison operator takes a bare keyword or a brace expression.
+	for _, tc := range []struct {
+		input string
+		op    PredicateOp
+	}{
+		{`created_at >= START_OF_WEEK`, OpGte}, {`d = END_OF_WEEK`, OpEq}, {`d != START_OF_MONTH`, OpNeq},
+		{`d > END_OF_MONTH`, OpGt}, {`d < start_of_year`, OpLt}, {`d <= End_Of_Year`, OpLte}, {`t > now`, OpGt},
+		{`n = {1}`, OpEq}, {`n != {1}`, OpNeq}, {`n > {1}`, OpGt}, {`n >= {1}`, OpGte}, {`n < {1}`, OpLt}, {`n <= {1}`, OpLte},
+	} {
+		if p, _ := parseExprValue(t, tc.input); p.Operator() != tc.op {
+			t.Errorf("%s: operator %d, want %d", tc.input, p.Operator(), tc.op)
+		}
+	}
+
+	// Plain literals have no tree.
+	root, err := Parse(`price > 300`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := root.(Predicate).Value(); v.Kind() != LiteralNumber || v.Expr() != nil {
+		t.Fatalf("plain literal: kind %d, expr %v", v.Kind(), v.Expr())
+	}
+	for _, input := range []string{`a = 'TODAY'`, `a = TRUE`, `a = NULL`, `a BETWEEN '1,2'`, `a CONTAINS 'x'`} {
+		root, err := Parse(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v := root.(Predicate).Value(); v.Kind() == LiteralExpr || v.Expr() != nil {
+			t.Errorf("%s: kind %d, expr %v", input, v.Kind(), v.Expr())
+		}
+	}
+}
+
+func TestParseExpressionNodes(t *testing.T) {
+	// Duration node.
+	_, v := parseExprValue(t, `t > {NOW - 30::minutes}`)
+	b, ok := v.Expr().(BinaryNode)
+	if !ok || b.Operator() != ArithSub || b.Pos() != 10 {
+		t.Fatalf("root: %s", dumpExpr(v.Expr()))
+	}
+	d, ok := b.Right().(DurationNode)
+	if !ok || d.Amount() != "30" || d.Unit() != UnitMinutes || d.Pos() != 12 || d.UnitPos() != 16 {
+		t.Fatalf("duration: %s", dumpExpr(b.Right()))
+	}
+
+	// Keyword node.
+	_, v = parseExprValue(t, `due = today`)
+	if k, ok := v.Expr().(KeywordNode); !ok || k.Keyword() != TimeToday || k.Text() != "today" || k.Pos() != 7 {
+		t.Fatalf("keyword: %s", dumpExpr(v.Expr()))
+	}
+
+	// Binary node position and no folding.
+	_, v = parseExprValue(t, `price > {100 * 3}`)
+	b, ok = v.Expr().(BinaryNode)
+	if !ok || b.Operator() != ArithMul || b.Pos() != 14 {
+		t.Fatalf("binary: %s", dumpExpr(v.Expr()))
+	}
+	l, lok := b.Left().(NumberNode)
+	r, rok := b.Right().(NumberNode)
+	if !lok || !rok || l.Text() != "100" || r.Text() != "3" {
+		t.Fatalf("operands: %s", dumpExpr(v.Expr()))
+	}
+
+	// Negation node.
+	_, v = parseExprValue(t, `delta > {-1.50 * 2}`)
+	b, ok = v.Expr().(BinaryNode)
+	if !ok || b.Operator() != ArithMul {
+		t.Fatalf("root: %s", dumpExpr(v.Expr()))
+	}
+	neg, ok := b.Left().(NegationNode)
+	if !ok || neg.Pos() != 10 {
+		t.Fatalf("negation: %s", dumpExpr(b.Left()))
+	}
+	if n, ok := neg.Operand().(NumberNode); !ok || n.Text() != "1.50" || n.Pos() != 11 {
+		t.Fatalf("operand: %s", dumpExpr(neg.Operand()))
+	}
+}
+
+// Each node type implements exactly one of the node interfaces, so a type
+// switch over them is unambiguous.
+func TestExprNodeInterfacesAreDisjoint(t *testing.T) {
+	_, v := parseExprValue(t, `a = {-(TODAY + 1::DAYS) * 2}`)
+	var nodes []ExprNode
+	var walk func(ExprNode)
+	walk = func(n ExprNode) {
+		nodes = append(nodes, n)
+		switch n := n.(type) {
+		case BinaryNode:
+			walk(n.Left())
+			walk(n.Right())
+		case NegationNode:
+			walk(n.Operand())
+		}
+	}
+	walk(v.Expr())
+	if len(nodes) != 6 {
+		t.Fatalf("nodes: %s", dumpExpr(v.Expr()))
+	}
+	for _, n := range nodes {
+		count := 0
+		for _, ok := range []bool{
+			isNode[NumberNode](n), isNode[KeywordNode](n), isNode[DurationNode](n), isNode[BinaryNode](n), isNode[NegationNode](n),
+		} {
+			if ok {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Errorf("%T implements %d node interfaces", n, count)
+		}
+	}
+}
+
+func isNode[T ExprNode](n ExprNode) bool { _, ok := n.(T); return ok }
+
+func TestParseKeywordsOnlyOnValueSide(t *testing.T) {
+	root, err := Parse(`today = 'x' AND now > 3`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top := root.(Logical)
+	l, r := top.Left().(Predicate), top.Right().(Predicate)
+	if l.Field() != "today" || l.Value().Kind() != LiteralString || r.Field() != "now" || r.Value().Kind() != LiteralNumber {
+		t.Fatalf("fields: %q %q", l.Field(), r.Field())
+	}
+	for _, input := range []string{`START_OF_WEEK = TODAY`, `days = {1::days}`, `"today" = now`} {
+		if _, err := Parse(input); err != nil {
+			t.Errorf("%s: %v", input, err)
+		}
+	}
+	root, err = Parse(`(a = {1} OR b = TODAY) AND c < {NOW - 1::HOURS}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if top := root.(Logical); top.Operator() != And || top.Left().(Logical).Operator() != Or {
+		t.Fatalf("grouping: %#v", root)
+	}
+}
+
+func TestEnumStrings(t *testing.T) {
+	var got []string
+	for k := TimeNow; k <= TimeEndOfYear+1; k++ {
+		got = append(got, k.String())
+	}
+	for u := UnitDays; u <= UnitMinutes+1; u++ {
+		got = append(got, u.String())
+	}
+	for o := ArithAdd; o <= ArithDiv+1; o++ {
+		got = append(got, o.String())
+	}
+	want := "NOW TODAY START_OF_WEEK END_OF_WEEK START_OF_MONTH END_OF_MONTH START_OF_YEAR END_OF_YEAR TimeKeyword(8) " +
+		"DAYS BUSINESS_DAYS HOURS MINUTES TimeUnit(4) + - * / ArithOp(4)"
+	if strings.Join(got, " ") != want {
+		t.Fatalf("got %s", strings.Join(got, " "))
 	}
 }

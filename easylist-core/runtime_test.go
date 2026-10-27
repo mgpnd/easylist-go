@@ -370,3 +370,115 @@ func TestUndeclaredEnumValues(t *testing.T) {
 		t.Fatalf("calculated enum err = %v", err)
 	}
 }
+
+// planDriver records every plan it compiles.
+type planDriver struct{ plans *[]*Plan }
+
+func (d planDriver) Compile(p *Plan) (string, []any, error) {
+	*d.plans = append(*d.plans, p)
+	return fakeDriver{}.Compile(p)
+}
+
+// fetchValue fetches input through rt and returns the value of its only
+// predicate in the page and count plans, which must agree.
+func fetchValue(t *testing.T, rt *Runtime, req Request) Value {
+	t.Helper()
+	var plans []*Plan
+	rt.Driver, rt.DB = planDriver{&plans}, &fakeDB{rows: map[string][][]any{"COUNT": {{int64(0)}}}}
+	if _, err := rt.Fetch(context.Background(), mustTasks(t), req, Want{Rows: true, Count: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(plans) != 2 {
+		t.Fatalf("plans = %d", len(plans))
+	}
+	pred := predicates(req.Filter)[0]
+	page, ok := plans[0].Value(pred)
+	if !ok {
+		t.Fatal("page plan has no value")
+	}
+	if count, _ := plans[1].Value(pred); count != page {
+		t.Errorf("count value %+v differs from page value %+v", count, page)
+	}
+	return page
+}
+
+func TestRuntimeNow(t *testing.T) {
+	rt := &Runtime{Clock: func() time.Time { return tuesday }}
+	if got := rt.Now(); !got.Equal(tuesday) {
+		t.Errorf("Now = %v", got)
+	}
+	before := time.Now()
+	got := (&Runtime{}).Now()
+	if got.Before(before) || got.After(time.Now()) || got.Location() != time.Local {
+		t.Errorf("Now without a clock = %v", got)
+	}
+}
+
+func TestFetchReferenceTime(t *testing.T) {
+	t.Run("server local time by default", func(t *testing.T) {
+		before := time.Now()
+		v := fetchValue(t, &Runtime{}, Request{Filter: parse(t, "due = TODAY")})
+		after := time.Now()
+		if v.Kind != ValueDate || v.Time.Location() != time.Local {
+			t.Fatalf("value = %+v", v)
+		}
+		y, m, d := v.Time.Date()
+		if !v.Time.Equal(date(y, m, d, time.Local)) {
+			t.Errorf("%v is not midnight", v.Time)
+		}
+		if got := v.Time.Format(time.DateOnly); got != before.Format(time.DateOnly) && got != after.Format(time.DateOnly) {
+			t.Errorf("TODAY = %s, want the local date %s", got, before.Format(time.DateOnly))
+		}
+	})
+	t.Run("runtime clock", func(t *testing.T) {
+		rt := &Runtime{Clock: func() time.Time { return tuesday.In(utc2) }}
+		v := fetchValue(t, rt, Request{Filter: parse(t, "t > NOW")})
+		if v.Kind != ValueTimestamp || !v.Time.Equal(tuesday) || v.Time.Location() != utc2 {
+			t.Errorf("value = %+v", v)
+		}
+	})
+	t.Run("application week start", func(t *testing.T) {
+		rt := &Runtime{Clock: func() time.Time { return tuesday }, WeekStart: weekday(time.Sunday)}
+		v := fetchValue(t, rt, Request{Filter: parse(t, "created_at >= START_OF_WEEK")})
+		if !v.Time.Equal(date(2026, 10, 25, time.UTC)) {
+			t.Errorf("START_OF_WEEK = %v, want Sunday 2026-10-25", v.Time)
+		}
+	})
+	t.Run("default week start", func(t *testing.T) {
+		rt := &Runtime{Clock: func() time.Time { return tuesday }}
+		v := fetchValue(t, rt, Request{Filter: parse(t, "created_at >= START_OF_WEEK")})
+		if !v.Time.Equal(date(2026, 10, 26, time.UTC)) {
+			t.Errorf("START_OF_WEEK = %v, want Monday 2026-10-26", v.Time)
+		}
+	})
+	t.Run("request reference time wins", func(t *testing.T) {
+		at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		rt := &Runtime{Clock: func() time.Time { return tuesday }}
+		v := fetchValue(t, rt, Request{Filter: parse(t, "t > NOW"), Now: at})
+		if !v.Time.Equal(at) {
+			t.Errorf("NOW = %v, want %v", v.Time, at)
+		}
+	})
+	t.Run("request week start wins", func(t *testing.T) {
+		rt := &Runtime{Clock: func() time.Time { return tuesday }, WeekStart: weekday(time.Sunday)}
+		v := fetchValue(t, rt, Request{Filter: parse(t, "due >= START_OF_WEEK"), WeekStart: weekday(time.Monday)})
+		if !v.Time.Equal(date(2026, 10, 26, time.UTC)) {
+			t.Errorf("START_OF_WEEK = %v, want Monday 2026-10-26", v.Time)
+		}
+	})
+	t.Run("clock read once", func(t *testing.T) {
+		calls := 0
+		rt := &Runtime{Clock: func() time.Time { calls++; return tuesday.Add(time.Duration(calls) * time.Hour) }}
+		fetchValue(t, rt, Request{Filter: parse(t, "t > NOW")})
+		if calls != 1 {
+			t.Errorf("clock read %d times", calls)
+		}
+	})
+}
+
+func TestPlanNeverReadsTheClock(t *testing.T) {
+	_, err := mustTasks(t).Plan(KindPage, Request{Filter: parse(t, "due = TODAY")})
+	if err == nil || !strings.HasSuffix(err.Error(), "at position 7") {
+		t.Fatalf("err = %v", err)
+	}
+}

@@ -77,6 +77,7 @@ func generateGo(pkgName, registryPkg, registryName string, lists []*easylist.Com
 			usesContext = usesContext || g.f.Calculated()
 		}
 		writeList(&body, l, fields)
+		usesTime = true // <P>ExportInput.AsOf
 	}
 
 	var b bytes.Buffer
@@ -203,8 +204,8 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 
 	// Inputs.
 	fmt.Fprintf(b, "type %sSort struct {\n\tField     %sSortField\n\tDirection easylistgql.SortDirection\n}\n\n", p, p)
-	fmt.Fprintf(b, "type %sListInput struct {\n\tFilter *string\n\tSort   []*%sSort\n\tLimit  *int\n\tOffset *int\n}\n\n", p, p)
-	fmt.Fprintf(b, "type %sExportInput struct {\n\tFields []%sExportField\n\tFilter *string\n\tSort   []*%sSort\n\tFormat easylistgql.ExportFormat\n}\n\n", p, p, p)
+	fmt.Fprintf(b, "type %sListInput struct {\n\tFilter *string\n\tSort []*%sSort\n\tLimit *int\n\tOffset *int\n\tTimezone *int\n}\n\n", p, p)
+	fmt.Fprintf(b, "type %sExportInput struct {\n\tFields []%sExportField\n\tFilter *string\n\tSort []*%sSort\n\tFormat easylistgql.ExportFormat\n\tTimezone *int\n\tAsOf *time.Time\n}\n\n", p, p, p)
 
 	fmt.Fprintf(b, "func %sSorts(in []*%sSort) []easylist.Sort {\n\tout := make([]easylist.Sort, 0, len(in))\n", lower, p)
 	b.WriteString("\tfor _, s := range in {\n\t\tif s != nil {\n\t\t\tout = append(out, easylist.Sort{Field: string(s.Field), Direction: easylist.Direction(s.Direction)})\n\t\t}\n\t}\n\treturn out\n}\n\n")
@@ -213,7 +214,7 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 	fmt.Fprintf(b, "// Resolve%s resolves a field returning %sPage. Only the fields selected\n// under items are queried, and the count runs only when totalCount is selected.\n", p, p)
 	fmt.Fprintf(b, "func Resolve%s(ctx context.Context, rt *easylist.Runtime, input %sListInput) (*%sPage, error) {\n", p, p, p)
 	fmt.Fprintf(b, "\tres, err := easylistgql.ResolveList(ctx, rt, registry(), %s, easylistgql.ListInput{\n", name)
-	fmt.Fprintf(b, "\t\tFilter: input.Filter, Sort: %sSorts(input.Sort), Limit: input.Limit, Offset: input.Offset,\n\t})\n", lower)
+	fmt.Fprintf(b, "\t\tFilter: input.Filter, Sort: %sSorts(input.Sort), Limit: input.Limit, Offset: input.Offset,\n\t\tTimezone: input.Timezone,\n\t})\n", lower)
 	b.WriteString("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
 	fmt.Fprintf(b, "\tpage := &%sPage{TotalCount: res.TotalCount, Items: make([]*%sRow, len(res.Rows))}\n", p, p)
 	fmt.Fprintf(b, "\tfor i, r := range res.Rows {\n\t\tpage.Items[i] = new%sRow(r)\n\t}\n\treturn page, nil\n}\n\n", p)
@@ -222,7 +223,7 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 	fmt.Fprintf(b, "func Export%s(ctx context.Context, rt *easylist.Runtime, input %sExportInput) (*easylistgql.ExportJob, error) {\n", p, p)
 	b.WriteString("\tfields := make([]string, len(input.Fields))\n\tfor i, f := range input.Fields {\n\t\tfields[i] = string(f)\n\t}\n")
 	fmt.Fprintf(b, "\treturn easylistgql.Export(ctx, rt, registry(), %s, easylistgql.ExportInput{\n", name)
-	fmt.Fprintf(b, "\t\tFields: fields, Filter: input.Filter, Sort: %sSorts(input.Sort), Format: input.Format,\n\t})\n}\n\n", lower)
+	fmt.Fprintf(b, "\t\tFields: fields, Filter: input.Filter, Sort: %sSorts(input.Sort), Format: input.Format,\n\t\tTimezone: input.Timezone, AsOf: input.AsOf,\n\t})\n}\n\n", lower)
 }
 
 // writeEnumSlice writes code that converts the []string src into a slice of

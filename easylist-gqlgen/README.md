@@ -10,10 +10,12 @@ For a list named `users` (prefix `Users`; `order_items` becomes `OrderItems`) th
 
 - `UsersRow` with one field per SQL and calculated field, non-null unless the field is nullable, and `UsersPage { items: [UsersRow!]!, totalCount: Int! }`.
 - An enum per enum field, such as `UsersStatus { ACTIVE ON_HOLD }`.
-- `UsersSortField` (SQL fields that are not arrays), `input UsersSort { field: UsersSortField!, direction: SortDirection! = ASC }`, and `input UsersListInput { filter: String, sort: [UsersSort!], limit: Int, offset: Int }`.
-- `UsersExportField` (SQL and calculated fields) and `input UsersExportInput { fields: [UsersExportField!]!, filter: String, sort: [UsersSort!], format: ExportFormat! }`.
+- `UsersSortField` (SQL fields that are not arrays), `input UsersSort { field: UsersSortField!, direction: SortDirection! = ASC }`, and `input UsersListInput { filter: String, sort: [UsersSort!], limit: Int, offset: Int, timezone: Int }`.
+- `UsersExportField` (SQL and calculated fields) and `input UsersExportInput { fields: [UsersExportField!]!, filter: String, sort: [UsersSort!], format: ExportFormat!, timezone: Int, asOf: Time }`.
 
-Once for all lists it declares `SortDirection { ASC DESC }`, `ExportFormat { CSV XLSX }`, `ExportJob { id: ID! }`, and the scalars the lists use:
+`timezone` is the client's UTC offset in minutes, positive east of UTC (UTC+02:00 is `120`, UTC-05:00 is `-300`), between -720 and 840. Relative filter values such as `TODAY` or `{NOW - 90::MINUTES}` are evaluated in that fixed zone; without it, the server's local time zone is used. `asOf` is the moment an export evaluates relative values at, so the file matches the list the user loaded; it defaults to the server's current time. Both fields carry descriptions in the generated SDL.
+
+Once for all lists it declares `SortDirection { ASC DESC }`, `ExportFormat { CSV XLSX }`, `ExportJob { id: ID! }`, and the scalars the lists use. `Time` is always declared, even when no list has a timestamp field, because every export input's `asOf` uses it.
 
 | Field type | GraphQL type |
 | --- | --- |
@@ -99,9 +101,9 @@ func (r mutationResolver) ExportPeople(ctx context.Context, input easylistgen.Us
 }
 ```
 
-`Resolve<P>` reads the operation's selection: only fields under `items` are queried (through fragments, inline fragments, aliases, and `@skip`/`@include`), the page query runs only when `items` is selected, and the count query only when `totalCount` is. Filter syntax and planning errors become GraphQL errors on the list field, with their positions, and no query runs. Calculated fields are methods on `<P>Row` that gqlgen calls only when selected; an error from one becomes an error on that field of that row. Row fields are non-null unless declared nullable, so, as GraphQL requires, such an error nulls the nearest nullable parent; with a non-null list field, as above, the whole request fails with that error. An enum value that is not declared, whether from the database or a calculated function, is an error too, never a silent null.
+`Resolve<P>` reads the operation's selection: only fields under `items` are queried (through fragments, inline fragments, aliases, and `@skip`/`@include`), the page query runs only when `items` is selected, and the count query only when `totalCount` is. Filter syntax, `timezone`, and planning errors become GraphQL errors on the list field, with their positions, and no query runs. When `timezone` is set, the reference time for relative values is `Runtime.Now()` (the runtime's `Clock`, or `time.Now`) in that offset; when it is absent, `Runtime.Fetch` uses the clock's own time and zone. Inject `Runtime.Clock` in tests to pin `TODAY`. Calculated fields are methods on `<P>Row` that gqlgen calls only when selected; an error from one becomes an error on that field of that row. Row fields are non-null unless declared nullable, so, as GraphQL requires, such an error nulls the nearest nullable parent; with a non-null list field, as above, the whole request fails with that error. An enum value that is not declared, whether from the database or a calculated function, is an error too, never a silent null.
 
-`Export<P>` validates the input with the same rules as the export worker, passes the `easylist.ExportRequest` to `Runtime.Exporter`, and returns `ExportJob` with the exporter's job ID. With no exporter configured it returns `ErrExportsNotConfigured`.
+`Export<P>` validates the input with the same rules as the export worker, passes the `easylist.ExportRequest` to `Runtime.Exporter`, and returns `ExportJob` with the exporter's job ID. The request's `AsOf` is the input's `asOf`, or `Runtime.Now()` when it is omitted, stored in UTC without a monotonic clock reading so it survives a JSON round trip; its `Timezone` is the input's `timezone`. A worker that runs the job later therefore evaluates `TODAY` as the user saw it. With no exporter configured it returns `ErrExportsNotConfigured`.
 
 ## Scalars
 

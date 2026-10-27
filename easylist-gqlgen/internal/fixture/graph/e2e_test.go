@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
 	easylistexport "github.com/mgpnd/easylist-go/easylist-export"
@@ -123,4 +124,67 @@ func TestEndToEndArrays(t *testing.T) {
 	if !reflect.DeepEqual(db.calls, want) {
 		t.Errorf("queries =\n%#v\nwant\n%#v", db.calls, want)
 	}
+}
+
+// TestEndToEndRelativeTime filters with TODAY in the client's time zone, on
+// the list query and through a queued export run later by a worker.
+func TestEndToEndRelativeTime(t *testing.T) {
+	queue := &queueExporter{}
+	db := &sqlDB{page: [][]any{{int64(1)}}, export: [][]any{{int64(1), "Ann"}}}
+	clock := time.Date(2026, 10, 28, 2, 0, 0, 0, time.UTC)
+	rt := &easylist.Runtime{Driver: sqlgoqu.New(), DB: db, Exporter: queue, Clock: func() time.Time { return clock }}
+
+	resp := run(t, rt, `{ people(query: {filter: "created_at = TODAY", timezone: -300, limit: 10}) { items { id } } }`)
+	if len(resp.Errors) > 0 {
+		t.Fatalf("errors: %+v", resp.Errors)
+	}
+	// TODAY is 2026-10-27 in UTC-05:00: from 05:00 UTC that day to 05:00 UTC the next.
+	start, end := time.Date(2026, 10, 27, 5, 0, 0, 0, time.UTC), time.Date(2026, 10, 28, 5, 0, 0, 0, time.UTC)
+	dayRange := `(u."created_at" >= $1 AND u."created_at" < $2)`
+	checkDay := func(what string, call sqlCall, wantQuery string, rest ...any) {
+		t.Helper()
+		if call.query != wantQuery {
+			t.Errorf("%s query =\n%s\nwant\n%s", what, call.query, wantQuery)
+		}
+		if len(call.args) != 2+len(rest) {
+			t.Fatalf("%s args = %#v", what, call.args)
+		}
+		for i, want := range []time.Time{start, end} {
+			if got, ok := call.args[i].(time.Time); !ok || !got.Equal(want) {
+				t.Errorf("%s arg %d = %#v, want %v", what, i+1, call.args[i], want)
+			}
+		}
+		if len(rest) > 0 && !reflect.DeepEqual(call.args[2:], rest) {
+			t.Errorf("%s args = %#v, want %#v after the day range", what, call.args[2:], rest)
+		}
+	}
+	if len(db.calls) != 1 {
+		t.Fatalf("queries = %#v", db.calls)
+	}
+	checkDay("page", db.calls[0], `SELECT u."id" AS "id" FROM users AS u WHERE ((u.deleted_at IS NULL) AND `+dayRange+
+		`) ORDER BY u."id" ASC LIMIT $3 OFFSET $4`, int64(10), int64(0))
+
+	db.calls = nil
+	resp = run(t, rt, `mutation { exportPeople(input: {fields: [NAME], filter: "created_at = TODAY", timezone: -300, format: CSV}) { id } }`)
+	if len(resp.Errors) > 0 || len(queue.jobs) != 1 {
+		t.Fatalf("export = %s %+v, jobs = %d", resp.Data, resp.Errors, len(queue.jobs))
+	}
+	var req easylist.ExportRequest
+	if err := json.Unmarshal(queue.jobs[0], &req); err != nil {
+		t.Fatal(err)
+	}
+	// The worker runs a day later, but evaluates TODAY at the request's AsOf.
+	clock = clock.AddDate(0, 0, 1)
+	var out bytes.Buffer
+	if err := easylistexport.Run(context.Background(), lists.Registry, rt, req, &out); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Full name\nAnn\n"; out.String() != want {
+		t.Errorf("csv = %q, want %q", out.String(), want)
+	}
+	if len(db.calls) != 1 {
+		t.Fatalf("export queries = %#v", db.calls)
+	}
+	checkDay("export", db.calls[0], `SELECT u."id" AS "id", u."name" AS "name" FROM users AS u WHERE ((u.deleted_at IS NULL) AND `+dayRange+
+		`) ORDER BY u."id" ASC`)
 }

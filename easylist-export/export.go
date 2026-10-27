@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
 )
@@ -16,11 +17,26 @@ import (
 // use does not grow with the row count. Run stops at the first error from
 // validation, the query, a calculated field, the encoder, w, or ctx; output
 // written before an error is incomplete.
+//
+// Relative values such as TODAY are evaluated at req.AsOf, or at rt.Now()
+// when AsOf is zero, in the zone given by req.Timezone (time.Local when it is
+// nil), with the runtime's week start.
 func Run(ctx context.Context, reg *easylist.Registry, rt *easylist.Runtime, req easylist.ExportRequest, w io.Writer) error {
 	// Definitions can change between enqueueing and running, so validate again.
 	l, planReq, err := reg.ValidateExport(req)
 	if err != nil {
 		return err
+	}
+	if planReq.Now.IsZero() {
+		zone := time.Local
+		if req.Timezone != nil {
+			// ValidateExport has already checked the offset.
+			zone, _ = easylist.UTCOffset(*req.Timezone)
+		}
+		planReq.Now = rt.Now().In(zone)
+	}
+	if planReq.WeekStart == nil {
+		planReq.WeekStart = rt.WeekStart
 	}
 	plan, err := l.Plan(easylist.KindExport, planReq)
 	if err != nil {

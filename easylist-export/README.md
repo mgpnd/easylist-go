@@ -42,6 +42,7 @@ func (w *Worker) Handle(ctx context.Context, jobID string, payload []byte) (path
 `Run`:
 
 - validates the request again against the current registry, because list definitions can change between enqueueing and running; a request that no longer validates fails before any row is written, with an error naming the problem, such as a removed field;
+- evaluates relative values such as `TODAY` and `{NOW - 90::MINUTES}` at the request's `AsOf`, so a job that waits in a queue still exports what the user saw. A request without `AsOf`, such as one queued before `AsOf` existed, uses the runtime's clock (`Runtime.Clock`, or `time.Now`) when the job runs. Values are evaluated in the zone given by the request's `Timezone` offset, or the worker's local time zone when it is unset, and weeks start on `Runtime.WeekStart` (Monday when nil). For example, `created_at = TODAY` with `AsOf` 2026-10-27T21:00:00Z and `Timezone` `120` exports the rows created on 2026-10-27 in UTC+02:00, even when the job runs the next day;
 - runs exactly one query, with the list's scope, the request's filter and sort, and no limit or offset, and encodes each row as it is read, so memory use does not grow with the number of rows;
 - evaluates requested calculated fields once per row with the worker's context;
 - stops at the first query, calculated-field, encoding, write, or context error and returns it. Treat anything already written as incomplete.

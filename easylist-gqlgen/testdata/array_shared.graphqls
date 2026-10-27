@@ -15,3 +15,5 @@ type ExportJob {
 scalar Int64
 
 scalar UUID
+
+scalar Time

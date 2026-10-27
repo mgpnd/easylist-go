@@ -62,6 +62,43 @@ func TestLexFilterTokens(t *testing.T) {
 			{kind: tokNull, text: "NULL", pos: 1}, {kind: tokNull, text: "null", pos: 6}, {kind: tokNull, text: "Null", pos: 11},
 			{kind: tokIdent, text: "NULL", pos: 16, quoted: true}, {kind: tokIdent, text: "nullable", pos: 23},
 		}},
+		{"brace mode without spaces", `{TODAY+5::DAYS}`, []token{
+			{kind: tokLBrace, text: "{", pos: 1}, {kind: tokIdent, text: "today", pos: 2}, {kind: tokPlus, text: "+", pos: 7},
+			{kind: tokNumber, text: "5", pos: 8}, {kind: tokDColon, text: "::", pos: 9}, {kind: tokIdent, text: "days", pos: 11},
+			{kind: tokRBrace, text: "}", pos: 15},
+		}},
+		{"brace mode with spaces", `{today + 5::days}`, []token{
+			{kind: tokLBrace, text: "{", pos: 1}, {kind: tokIdent, text: "today", pos: 2}, {kind: tokPlus, text: "+", pos: 8},
+			{kind: tokNumber, text: "5", pos: 10}, {kind: tokDColon, text: "::", pos: 11}, {kind: tokIdent, text: "days", pos: 13},
+			{kind: tokRBrace, text: "}", pos: 17},
+		}},
+		{"unsigned numbers in braces", `{-1.50 * 2/(3-+4)}`, []token{
+			{kind: tokLBrace, text: "{", pos: 1}, {kind: tokMinus, text: "-", pos: 2}, {kind: tokNumber, text: "1.50", pos: 3},
+			{kind: tokStar, text: "*", pos: 8}, {kind: tokNumber, text: "2", pos: 10}, {kind: tokSlash, text: "/", pos: 11},
+			{kind: tokLParen, text: "(", pos: 12}, {kind: tokNumber, text: "3", pos: 13}, {kind: tokMinus, text: "-", pos: 14},
+			{kind: tokPlus, text: "+", pos: 15}, {kind: tokNumber, text: "4", pos: 16}, {kind: tokRParen, text: ")", pos: 17},
+			{kind: tokRBrace, text: "}", pos: 18},
+		}},
+		{"words in braces are identifiers", `{AND True null NoW}`, []token{
+			{kind: tokLBrace, text: "{", pos: 1}, {kind: tokIdent, text: "and", pos: 2}, {kind: tokIdent, text: "true", pos: 6},
+			{kind: tokIdent, text: "null", pos: 11}, {kind: tokIdent, text: "now", pos: 16}, {kind: tokRBrace, text: "}", pos: 19},
+		}},
+		{"unclosed brace", `due > {TODAY`, []token{
+			{kind: tokIdent, text: "due", pos: 1}, {kind: tokGt, text: ">", pos: 5}, {kind: tokLBrace, text: "{", pos: 7},
+			{kind: tokIdent, text: "today", pos: 8},
+		}},
+		{"signed numbers outside braces", `age > -3 AND x = {1} AND y < +2`, []token{
+			{kind: tokIdent, text: "age", pos: 1}, {kind: tokGt, text: ">", pos: 5}, {kind: tokNumber, text: "-3", pos: 7},
+			{kind: tokAnd, text: "AND", pos: 10}, {kind: tokIdent, text: "x", pos: 14}, {kind: tokEq, text: "=", pos: 16},
+			{kind: tokLBrace, text: "{", pos: 18}, {kind: tokNumber, text: "1", pos: 19}, {kind: tokRBrace, text: "}", pos: 20},
+			{kind: tokAnd, text: "AND", pos: 22}, {kind: tokIdent, text: "y", pos: 26}, {kind: tokLt, text: "<", pos: 28},
+			{kind: tokNumber, text: "+2", pos: 30},
+		}},
+		{"operators outside braces", `TODAY * 2 / 5::DAYS }`, []token{
+			{kind: tokIdent, text: "today", pos: 1}, {kind: tokStar, text: "*", pos: 7}, {kind: tokNumber, text: "2", pos: 9},
+			{kind: tokSlash, text: "/", pos: 11}, {kind: tokNumber, text: "5", pos: 13}, {kind: tokDColon, text: "::", pos: 14},
+			{kind: tokIdent, text: "days", pos: 16}, {kind: tokRBrace, text: "}", pos: 21},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -73,6 +110,17 @@ func TestLexFilterTokens(t *testing.T) {
 				t.Fatalf("tokens = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLexFilterBraceMessages(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{`due > {{TODAY}}`, "nested '{' at position 8"},
+		{`a = {1:2}`, "expected ':' after ':' at position 7"},
+	} {
+		if _, err := lexFilter(tc.input); err == nil || err.Error() != tc.want {
+			t.Errorf("%q: got %v, want %q", tc.input, err, tc.want)
+		}
 	}
 }
 
@@ -94,6 +142,8 @@ func TestLexFilterErrorPositions(t *testing.T) {
 		{`n = 12abc`, 7}, {`n = 1,2`, 6}, {`n ! 2`, 3}, {`n = [1]`, 5},
 		{`n !`, 3}, {`n ! = 2`, 3}, {`n !x`, 3}, {`n !! 2`, 3},
 		{`a.b = 2`, 2}, {`"é" = @`, 8}, {"n = \x00", 5},
+		{`due > {{TODAY}}`, 8}, {`a = {1 + {2}}`, 10}, {`a = {1:2}`, 7}, {`a = 1 : 2`, 7},
+		{`a = {1.}`, 8}, {`a = {1abc}`, 7}, {`a = {1 + @}`, 10}, {`a = {'x}`, 6},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

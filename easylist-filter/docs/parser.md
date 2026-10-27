@@ -43,8 +43,8 @@ on the first byte:
 | ----------------------- | ---------------- | ------------------------------------------ |
 | `'` or `"`              | `scanQuoted`     | `tokString` (`'…'`) or quoted `tokIdent` (`"…"`) |
 | letter, `_`, byte ≥ 128 | `scanIdentifier` | a keyword token or `tokIdent`              |
-| digit, `+`, `-`         | `scanNumber`     | `tokNumber`                                |
-| `= ( ) > < !`           | inline in `scanToken` | operator and paren tokens             |
+| digit; `+`, `-` outside braces | `scanNumber` | `tokNumber`                             |
+| `= ( ) > < ! { } * / :`; `+ -` inside braces | inline in `scanToken` | operator, paren, and brace tokens |
 
 Each token records its kind, its text, and the 1-based byte position of its
 first byte. A few rules worth knowing:
@@ -66,6 +66,16 @@ first byte. A few rules worth knowing:
   followed by digits. The number must not run straight into an identifier
   byte or another `.`, so `1abc` and `1.2.3` are errors rather than being
   split into misleading separate tokens.
+- **Brace mode.** `{` sets the lexer's `brace` flag and `}` clears it. While
+  it is set, `+` and `-` are `tokPlus` and `tokMinus` instead of the start of
+  a signed number, and `scanIdentifier` skips the `keywords` map, so every
+  word, even `AND` or `TRUE`, is a `tokIdent`. A `{` while the flag is set is
+  the error `nested '{'`. `*`, `/`, and `::` (`tokStar`, `tokSlash`,
+  `tokDColon`) are tokens in both modes, so that outside braces the parser
+  reports them at their own position; a lone `:` is an error. Outside braces
+  nothing else changes, so `age > -3` still lexes `-3` as one number. The
+  relative time keywords and units are never lexer keywords: the grammar
+  recognises them from `tokIdent`.
 
 The lexer is all-or-nothing: on the first invalid byte it returns no tokens,
 only the error.
@@ -75,9 +85,17 @@ only the error.
 The parser is generated. `grammar.y` holds the syntax rules, and
 [goyacc](https://pkg.go.dev/golang.org/x/tools/cmd/goyacc) builds an LALR(1)
 parser from them into `parser_gen.go`, which is committed. The `go:generate`
-directive in `parser.go` runs it at a pinned version. The rules in
-`grammar.y` mirror the grammar in [query-language.md](query-language.md);
-`grammar_doc_test.go` fails if the two drift apart.
+directive in `parser.go` runs it at a pinned version. The language reference,
+[query-language.md](query-language.md), documents the same language as EBNF.
+The two are not compared rule by rule, because EBNF uses `{ }` repetition
+where `grammar.y` needs left recursion. Instead, `grammar_doc_test.go` reads
+the syntactic `ebnf` block, runs a small backtracking recognizer over the
+lexer's tokens, and fails, naming the filter, if the documented grammar and
+`Parse` disagree on any filter of a shared corpus of accepted and rejected
+inputs. The corpus includes every line of the doc's `filter` blocks and the
+inputs of the parser's syntax error, error message, and expression tree
+tests. When the language changes, update the EBNF and add the new filters to
+the corpus.
 
 `parser.go` is the hand-written glue around the generated code:
 
@@ -92,7 +110,11 @@ directive in `parser.go` runs it at a pinned version. The rules in
   those constants unexported, so nothing from `parser_gen.go` joins the
   package API. `TestGeneratedCodeExportsNothing` checks this.
 - Reductions in `grammar.y` build the tree directly. The finished tree is
-  stored on `parseState`, and `Parse` returns it.
+  stored on `parseState`, and `Parse` returns it. A few actions also make
+  syntactic checks that the grammar cannot express (see
+  [Expression values](#expression-values)); they report through
+  `parseState.fail`, which keeps the first error. Parsing goes on, but
+  `Parse` returns that error.
 
 Each `Parse` call owns its own `parseState`, so `Parse` is safe for concurrent
 use.
@@ -132,12 +154,15 @@ returns its inner expression, so `(a = 1 OR b = 2) AND c = 3` is just an
 
 ### Predicates
 
-The four `predicate` rules build a `predicateNode`:
+The five `predicate` rules build a `predicateNode`:
 
-- `tIDENT ordinary_op value` covers `=`, `!=`, `>`, `>=`, `<`, `<=`,
-  `CONTAINS` and `EXCLUDES`. The `ordinary_op` rules translate each token to
-  the public `PredicateOp` and keep its position. The `value` rules do the
-  same for `tSTRING`, `tNUMBER` and `tBOOL`.
+- `tIDENT comparison_op comparison_value` covers `=`, `!=`, `>`, `>=`, `<`,
+  and `<=`, and `tIDENT set_op plain_value` covers `CONTAINS` and
+  `EXCLUDES`. The `comparison_op` and `set_op` rules translate each token to
+  the public `PredicateOp` and keep its position. The `plain_value` rules do
+  the same for `tSTRING`, `tNUMBER` and `tBOOL`. A `comparison_value` is a
+  `plain_value`, a bare `tIDENT` (a time keyword), or `'{' sum '}'`, so the
+  grammar itself rejects relative values after `CONTAINS` and `EXCLUDES`.
 - `tIDENT tBETWEEN tSTRING` is a separate rule, so the grammar itself enforces
   that `BETWEEN` takes a string.
 - `tIDENT '=' tNULL` and `tIDENT tNEQ tNULL` build an `OpEq` or `OpNeq`
@@ -150,6 +175,39 @@ The resulting `predicateNode` keeps the field token (name, quoted flag,
 position), the operator and its position, and a `Literal` with the decoded
 text and position. Downstream compilers use these positions to report
 schema errors.
+
+### Expression values
+
+A bare `tIDENT` value and `'{' sum '}'` both build a `LiteralExpr` literal.
+Its text is sliced from the input (`parseState.src`), braces included, and
+`Literal.Expr()` returns the tree. Inside braces the rules are stratified
+like the connectors, so precedence and left association again come from the
+shape of the rules:
+
+```
+sum    : term | sum '+' term | sum '-' term ;
+term   : factor | term '*' factor | term '/' factor ;
+factor : '-' factor | atom ;
+atom   : tNUMBER | tNUMBER tDCOLON tIDENT | tIDENT | '(' sum ')' ;
+```
+
+Binary rules build a `binaryNode` at the operator's position, `'-' factor`
+a `negationNode`, and `'(' sum ')'` returns its inner node. Nothing is folded
+or type-checked: the parser never evaluates the tree, and `{NOW - TODAY}`
+parses. Three helpers on `parseState` make the only checks:
+
+- `keyword` maps an identifier, by its ASCII-folded text, to a
+  `keywordNode` with its source spelling. A quoted identifier, or a word that
+  is not one of the eight keywords, is an error at its position naming it,
+  such as `unknown time keyword 'tomorrow' at position 7`.
+- `duration` builds a `durationNode` from `tNUMBER tDCOLON tIDENT`. A decimal
+  amount is an error at the amount, and an unknown unit an error at the unit.
+  The amount's size is not limited.
+- `spelling` recovers an identifier's source spelling: folding keeps the
+  length, so it is `src[pos-1 : pos-1+len(text)]`.
+
+Keywords and units are matched in the grammar actions, not in the lexer, so
+they are not reserved words and `today = 'x'` still names a field.
 
 ### Nesting depth
 
@@ -178,12 +236,19 @@ rules in order:
    and ending in ` at position N`.
 
 The rewording uses the `tokenDisplay` map, which turns generated token names
-into user-facing ones: `$end` becomes "end of input", `tIDENT` becomes
-"field", and `tSTRING`, `tNUMBER` and `tBOOL` become "string", "number" and
-"boolean". `tNEQ`, `tGTE` and `tLTE` print as `'!='`, `'>='` and `'<='`, and
-the keyword tokens print as their keyword, such as `AND`, `OR`, and `NULL`. Quoted
-character tokens like `'('` are not in the map and print as they are. A list
-of expected tokens reads "expected a, b, or c".
+into user-facing ones: `$end` becomes "end of input", and `tSTRING`,
+`tNUMBER` and `tBOOL` become "string", "number" and "boolean". `tNEQ`,
+`tGTE`, `tLTE` and `tDCOLON` print as `'!='`, `'>='`, `'<='` and `'::'`, and
+the keyword tokens print as their keyword, such as `AND`, `OR`, and `NULL`.
+Quoted character tokens like `'('` and `'{'` are not in the map and print as
+they are. A list of expected tokens reads "expected a, b, or c".
+
+`tIDENT` is named by where the parser stopped, which `errorContext` works out
+from the tokens before the lookahead: "unit" right after `::` inside braces,
+"time keyword" elsewhere inside braces, "identifier" right after a predicate
+operator, and "field" everywhere else. So `due > {}` reports "unexpected '}',
+expected time keyword, number, '(', or '-'", and `name CONTAINS TODAY`
+reports "unexpected identifier, expected string, number, or boolean".
 
 goyacc's default reductions can leave `tAND` out of an expected list that
 contains `tOR`: after `(a = 1`, the parser reduces to an `or_expr` before it
@@ -192,13 +257,21 @@ Every `or_expr` ends in an `and_expr`, so wherever `OR` may follow, `AND` may
 too, and `describeSyntaxError` inserts `AND` before `OR`. For example,
 `(a = 1 b = 2)` reports "unexpected field, expected AND, OR, or ')'".
 
-Default reductions also leave `NULL` out of the expected list after `=` or
-`!=`: once the parser sees a token that cannot follow the operator, it has
-already reduced it to `ordinary_op`, so `a =` reports "expected string,
-number, or boolean". The message is still correct, just less complete, and
-no rewrite rule adds `NULL` back. A misplaced `NULL` is reported at its own
-position, for example `age > NULL` gives "unexpected NULL, expected string,
-number, or boolean at position 7".
+The same happens inside braces: after an operand the parser reduces to a
+`sum` and lists only `'}'` (or `')'`), `'+'` and `'-'`. Every `sum` ends in a
+`term`, so wherever `'+'` may follow, `'*'` and `'/'` may too, and
+`describeSyntaxError` inserts them after `'-'`. For example,
+`due > {TODAY + 5::DAYS` reports "unexpected end of input, expected '}', '+',
+'-', '*', or '/'".
+
+goyacc lists at most four expected tokens and gives no list at all when there
+are more. A comparison operator can be followed by five or six (a string, a
+number, a Boolean, `NULL` after `=` and `!=`, a time keyword, or `{`), so
+when the token before the error is a comparison operator and goyacc gave no
+list, `describeSyntaxError` writes it out. `a =` reports "expected string,
+number, boolean, NULL, time keyword, or '{'", and a misplaced `NULL` is
+reported at its own position, for example `age > NULL` gives "unexpected
+NULL, expected string, number, boolean, time keyword, or '{' at position 7".
 
 `parseState.Lex` records the most recent token it returned and whether it
 reached the end of input, which is what the rules above use to pick a
@@ -214,7 +287,7 @@ of `TestParseErrorMessages` and must be updated together with them.
 | --------------------- | ------------------------------------------- |
 | *(empty)*             | `unexpected end of input, expected field or '(' at position 1` |
 | `a 1`                 | `unexpected number at position 3`           |
-| `a =`                 | `unexpected end of input, expected string, number, or boolean at position 4` |
+| `a =`                 | `unexpected end of input, expected string, number, boolean, NULL, time keyword, or '{' at position 4` |
 | `a BETWEEN 1`         | `unexpected number, expected string at position 11` |
 | `(a = 1 OR)`          | `unexpected ')', expected field or '(' at position 10` |
 | `a = 1 b = 2`         | `unexpected field at position 7`            |
@@ -232,15 +305,23 @@ updated `parser_gen.go`.
 
 - **New predicate operator:** add a token kind and its scanning in
   `lexer.go` (in the `keywords` map if it is a word), a `PredicateOp` in
-  `ast.go`, a `t`-prefixed `%token` and an `ordinary_op` alternative in
-  `grammar.y`, a `yyCodes` entry in `parser.go`, and a `tokenDisplay` entry
-  for the token. Then run `go generate`.
-- **New literal kind:** add a token kind, its scanner, a `LiteralKind`, a
-  `t`-prefixed `%token` and a `value` alternative in `grammar.y`, a `yyCodes`
-  entry, and a `tokenDisplay` entry.
+  `ast.go`, a `t`-prefixed `%token` and a `comparison_op` or `set_op`
+  alternative in `grammar.y`, a `yyCodes` entry in `parser.go`, and a
+  `tokenDisplay` entry for the token. Then update the EBNF and its corpus as
+  for a new rule, and run `go generate`.
+- **New literal kind:** add a token kind, its scanner, a `LiteralKind`
+  (appended, so existing values keep their numbers), a `t`-prefixed `%token`
+  and a `plain_value` alternative in `grammar.y`, a `yyCodes` entry, and a
+  `tokenDisplay` entry.
+- **New time keyword or unit:** append it to `TimeKeyword` or `TimeUnit` and
+  to `timeKeywordNames` or `timeUnitNames` in `ast.go`, and to the
+  `time keyword` or `time unit` rule of the EBNF. The lexer and grammar need
+  no change.
 - **New rule** (for example a prefix `NOT`): edit `grammar.y`, update the
-  `yacc` block in [query-language.md](query-language.md) (the test enforces
-  that it matches), then run `go generate`.
+  syntactic `ebnf` block in [query-language.md](query-language.md), add
+  accepted and rejected filters for it to the corpus in
+  `grammar_doc_test.go`, then run `go generate`. The test fails, naming the
+  filter, when the parser and the documented grammar disagree on one.
 
 Update the tests in `parser_test.go` / `lexer_test.go` alongside any grammar
 change. `TestParseDepthAndIdentifiers` covers 2,000 nested groups.

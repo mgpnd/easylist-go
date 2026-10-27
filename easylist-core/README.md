@@ -149,9 +149,40 @@ func firstPage(ctx context.Context, reg *easylist.Registry, db *sql.DB, driver e
 
 Lower-level pieces are available for other integrations: `CompiledList.Plan` builds a `Plan` of kind `KindPage`, `KindCount`, or `KindExport`; `Runtime.Stream` and `Runtime.Count` run one plan.
 
+## Relative time and expression values
+
+A filter value can be a relative time keyword, such as `TODAY` or `START_OF_WEEK`, or an arithmetic expression in braces, such as `{TODAY + 5::BUSINESS_DAYS}` or `{100 * 3}`; see the [query language](../easylist-filter/docs/query-language.md). The parser only builds the expression tree. The planner type-checks every expression against its field and evaluates it, so drivers never evaluate anything:
+
+- An expression is a number, a duration, a date, or a timestamp. `NOW` is a timestamp and the other keywords are dates. A whole expression must be a number, a date, or a timestamp.
+- A number result suits `Integer`, `Float`, and `Numeric` fields, a date result suits `Date` and `Timestamp` fields, and a timestamp result suits `Timestamp` fields only. Array fields and every other type reject expression values.
+- Number arithmetic is exact. A division by zero, or a quotient with no finite decimal form such as `{1 / 3}`, is an error at the `/`.
+- A duration is an ordered list of amounts, such as `(1::DAYS + 2::HOURS)`, applied one at a time as written. `DAYS` moves by calendar days and keeps the wall-clock time, `HOURS` and `MINUTES` move by elapsed time, and `BUSINESS_DAYS` counts Monday to Friday with no holidays. A date plus a duration stays a date only when every amount is in `DAYS` or `BUSINESS_DAYS`. Each amount is at most 10,000,000, and results must stay within the years 1 to 9999.
+
+Every type and evaluation error names the byte position of the node that caused it, like a syntax error.
+
+Relative values are evaluated at `Request.Now`, in the time zone of its location, with `Request.WeekStart` as the first day of the week (nil means Monday). A date is midnight at the start of that day in that zone. `CompiledList.Plan` never reads the system clock: planning a filter that uses a time keyword fails when `Now` is zero. Numbers need no reference time.
+
+`Runtime.Fetch` fills a request's missing `Now` from `Runtime.Clock`, or from `time.Now` in the server's local time zone when there is no clock, and a missing `WeekStart` from `Runtime.WeekStart`. A request's own values take precedence, and `Runtime.Now` returns the runtime's current time. Tests can inject a clock:
+
+```go
+func newRuntime(driver easylist.Driver, db *sql.DB) *easylist.Runtime {
+	sunday := time.Sunday
+	return &easylist.Runtime{
+		Driver:    driver,
+		DB:        easylist.SQLDB(db),
+		Clock:     func() time.Time { return time.Now().UTC() },
+		WeekStart: &sunday,
+	}
+}
+```
+
+Drivers read the result for a predicate whose value is a `filter.LiteralExpr` with `Plan.Value(pred)`. A `Value` has a `Kind` of `ValueNumber`, `ValueDate`, or `ValueTimestamp`. A number is exact decimal text in `Value.Number`, with no exponent and no trailing fractional zeros, which drivers convert like a number literal, so an integer field still rejects `{10 / 4}`. A date or timestamp is in `Value.Time`. Drivers should compare a date result on a timestamp field with the whole day in the value's time zone, so `created_at <= END_OF_WEEK` includes all of the last day. Drivers that switch on `filter.LiteralKind` must handle or reject `LiteralExpr`.
+
 ## Exports
 
-`ExportRequest` is a JSON-serializable export description (list, ordered fields, filter text, sort, and `CSV` or `XLSX`). `Registry.ValidateExport` applies the same rules when an export is requested and when a worker runs it. Applications accept validated requests through the `Exporter` interface on `Runtime` and own the queue, job status, and file storage.
+`ExportRequest` is a JSON-serializable export description (list, ordered fields, filter text, sort, `CSV` or `XLSX`, the request moment `AsOf`, and the client's UTC offset `Timezone` in minutes). `Registry.ValidateExport` applies the same rules when an export is requested and when a worker runs it. Applications accept validated requests through the `Exporter` interface on `Runtime` and own the queue, job status, and file storage.
+
+`AsOf` is the moment relative values are evaluated at, so a job that waits in a queue still exports the rows the user saw. Store it in UTC, for example as `t.UTC().Round(0)`, so it survives a JSON round trip unchanged. `Timezone` is the offset east of UTC, between -720 and 840; nil means the server's local time zone. `UTCOffset(minutes)` validates an offset and returns its fixed zone. When `AsOf` is set, `ValidateExport` returns a request whose `Now` is `AsOf` in that zone. When it is not, as in requests serialized before these fields existed, `Now` stays zero, relative values are only type-checked, and the worker fills `Now` from its runtime clock. Both fields are omitted from the JSON when unset.
 
 ## Run unit tests
 
