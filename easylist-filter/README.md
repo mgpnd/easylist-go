@@ -5,8 +5,9 @@
 ## Package
 
 - **Root package (`filter`):** exposes `filter.Parse` to build the AST. The parser is generated from `grammar.y`. Inspect nodes through `filter.Predicate` and `filter.Logical`. Parentheses are represented by tree shape.
+- **Relative values:** a value can be a time keyword such as `TODAY` or a brace expression such as `{TODAY + 5::DAYS}`. It parses to a `filter.LiteralExpr` literal whose `Expr()` returns an unevaluated tree of `filter.NumberNode`, `filter.KeywordNode`, `filter.DurationNode`, `filter.BinaryNode`, and `filter.NegationNode`. The parser only checks syntax: the `easylist-core` planner type-checks and evaluates the tree, and drivers read its results from the plan. Code that switches on `filter.LiteralKind` must handle or reject `LiteralExpr`.
 
-The filter syntax is described in [docs/query-language.md](docs/query-language.md), and the lexer and parser internals in [docs/parser.md](docs/parser.md). Unit tests live alongside the package source files.
+The filter syntax is described in [docs/query-language.md](docs/query-language.md), with its grammar in EBNF, and the lexer and parser internals in [docs/parser.md](docs/parser.md). Unit tests live alongside the package source files; `grammar_doc_test.go` checks that the documented EBNF and the parser accept and reject the same filters.
 
 ## Parse a filter
 
