@@ -32,7 +32,7 @@ The resolver SHALL run the page query only when `items` is selected and the coun
 - **THEN** only the count query runs
 
 ### Requirement: Input mapping and errors
-`filter` SHALL be parsed with easylist-filter; an empty or absent filter means no filter. Sort entries, limit, and offset SHALL be passed to the planner. Parse and planning errors SHALL be returned as GraphQL errors on the list field, keeping their position information, without running any query.
+`filter` SHALL be parsed with easylist-filter; an empty or absent filter means no filter. Sort entries, limit, and offset SHALL be passed to the planner. When `timezone` is set, the reference time SHALL be the runtime clock's current time in a fixed zone with that UTC offset in minutes; when it is absent, the runtime's default reference time applies. A `timezone` outside -720 to 840 SHALL be an error. Parse, timezone, and planning errors SHALL be returned as GraphQL errors on the list field, keeping their position information, without running any query.
 
 #### Scenario: Filter syntax error
 - **WHEN** `filter` is `name = `
@@ -41,6 +41,14 @@ The resolver SHALL run the page query only when `items` is selected and the coun
 #### Scenario: Limit above maximum
 - **WHEN** `limit` is 20000 for a list with maximum page size 10000
 - **THEN** the field resolves to an error stating the maximum
+
+#### Scenario: Client time zone
+- **WHEN** `filter` is `created_at = TODAY`, `timezone` is `-300`, and the runtime clock reads 2026-10-28T02:00:00Z
+- **THEN** `TODAY` is 2026-10-27, the date in UTC-05:00
+
+#### Scenario: Timezone out of range
+- **WHEN** `timezone` is `-800`
+- **THEN** the field resolves to an error stating the allowed range, and no query runs
 
 ### Requirement: Calculated field resolution
 A calculated field on `<P>Row` SHALL be resolved by calling its function for that row only when the field is selected. An error from the function SHALL become a GraphQL error on that field of that row, and GraphQL non-null rules SHALL apply: a null in a non-null field nulls its nearest nullable parent, so a request whose path to the field is non-null fails with that error. A non-null field SHALL never resolve to a silent null.
@@ -54,7 +62,7 @@ A calculated field on `<P>Row` SHALL be resolved by calling its function for tha
 - **THEN** the request fails with an error naming the field and the value
 
 ### Requirement: One-call export resolver
-For each list the library SHALL provide a function that an application mutation resolver calls with the request context, the runtime, and the `<P>ExportInput`. It SHALL validate the input into an export request, pass it to the application's exporter, and return `ExportJob` with the exporter's job identifier.
+For each list the library SHALL provide a function that an application mutation resolver calls with the request context, the runtime, and the `<P>ExportInput`. It SHALL validate the input into an export request whose request moment is the input's `asOf`, or the runtime clock's current time when `asOf` is absent, stored in UTC, and whose UTC offset is the input's `timezone`, pass it to the application's exporter, and return `ExportJob` with the exporter's job identifier.
 
 #### Scenario: Export accepted
 - **WHEN** the mutation is called with valid fields and the exporter returns `job-42`
@@ -67,3 +75,11 @@ For each list the library SHALL provide a function that an application mutation 
 #### Scenario: No exporter configured
 - **WHEN** the runtime has no exporter and the export function is called
 - **THEN** it returns an error stating that exports are not configured
+
+#### Scenario: Request moment defaults to server time
+- **WHEN** the mutation is called with `timezone: 120` and no `asOf` while the runtime clock reads 2026-10-27T10:00:00+02:00
+- **THEN** the exporter receives a request with request moment 2026-10-27T08:00:00Z and offset `120`
+
+#### Scenario: Client-supplied asOf
+- **WHEN** the mutation is called with `asOf: "2026-10-01T09:00:00+02:00"`
+- **THEN** the exporter receives a request with request moment 2026-10-01T07:00:00Z, whatever the runtime clock reads
