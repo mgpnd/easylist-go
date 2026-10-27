@@ -81,18 +81,22 @@ A duration SHALL be an unsigned integer literal of at most 10000000, followed by
 - **THEN** parsing fails with an error at the position of `1.5`
 
 ### Requirement: Duration arithmetic types
-Duration `*` integer, integer `*` duration, and duration `/` integer SHALL give a duration, and `/` SHALL divide the amount exactly. Duration `+` or `-` duration SHALL be allowed only for the same unit. Unary `-` SHALL negate a duration. Any other operation on a duration SHALL be a type error at the operator's position.
+Duration `+` or `-` duration SHALL give a duration, for the same or different units. Duration `*` integer, integer `*` duration, and duration `/` integer SHALL give a duration, and `/` SHALL divide every unit's amount exactly. Unary `-` SHALL negate a duration. Any other operation on a duration SHALL be a type error at the operator's position.
 
 #### Scenario: Mixed units in one step
 - **WHEN** the filter `t > {NOW + (1::DAYS + 2::HOURS)}` is parsed
-- **THEN** parsing fails with an error at the position of the inner `+`
+- **THEN** parsing succeeds with the same value as `t > {NOW + 1::DAYS + 2::HOURS}`
+
+#### Scenario: Scaling a mixed duration
+- **WHEN** the filter `t > {NOW - 2 * (1::DAYS - 30::MINUTES)}` is parsed
+- **THEN** parsing succeeds with the same value as `t > {NOW - 2::DAYS + 60::MINUTES}`
 
 #### Scenario: Inexact duration division
-- **WHEN** the filter `due > {TODAY + 5::DAYS / 2}` is parsed
+- **WHEN** the filter `due > {TODAY + 5::DAYS / 2}` or `t > {NOW + (2::DAYS + 3::HOURS) / 2}` is parsed
 - **THEN** parsing fails with an error at the position of `/`
 
 ### Requirement: Time arithmetic types
-A date or timestamp plus a duration, a duration plus a date or timestamp, and a date or timestamp minus a duration SHALL give a time. A date plus `DAYS` or `BUSINESS_DAYS` SHALL stay a date, and a date plus `HOURS` or `MINUTES` SHALL become a timestamp. Any other operation involving a time SHALL be a type error at the operator's position.
+A date or timestamp plus a duration, a duration plus a date or timestamp, and a date or timestamp minus a duration SHALL give a time. A date plus a duration made only of `DAYS` and `BUSINESS_DAYS` SHALL stay a date, and a date plus a duration with any `HOURS` or `MINUTES` SHALL become a timestamp. Any other operation involving a time SHALL be a type error at the operator's position.
 
 #### Scenario: Mixed units applied in turn
 - **WHEN** the filter `t > {NOW + 1::DAYS + 2::HOURS}` is parsed

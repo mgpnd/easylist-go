@@ -47,11 +47,15 @@ Given a first day of the week `W`, `START_OF_WEEK` SHALL evaluate to the latest 
 - **THEN** the result is 2026-12-31
 
 ### Requirement: Calendar and elapsed durations
-Evaluation SHALL apply operations left to right as written. `n::DAYS` SHALL move by `n` calendar days in `Z`, keeping the wall-clock time of a timestamp. `n::HOURS` and `n::MINUTES` SHALL move by `n` × 60 or `n` minutes of elapsed time. A result outside the years 1 to 9999 SHALL fail evaluation with an error.
+Evaluation SHALL apply operations left to right as written. A duration of several units SHALL be applied one unit amount at a time in the order written, so adding `(a + b)` equals adding `a` and then `b`. `n::DAYS` SHALL move by `n` calendar days in `Z`, keeping the wall-clock time of a timestamp. `n::HOURS` and `n::MINUTES` SHALL move by `n` × 60 or `n` minutes of elapsed time. A result outside the years 1 to 9999 SHALL fail evaluation with an error.
 
 #### Scenario: Calendar days across a DST change
 - **WHEN** `{NOW + 1::DAYS}` is evaluated at 2026-10-24T12:00 in a zone whose clocks go back one hour on 2026-10-25
 - **THEN** the result is 2026-10-25T12:00 in that zone, 25 hours later
+
+#### Scenario: Mixed-unit duration
+- **WHEN** `{NOW + (1::DAYS + 2::HOURS)}` is evaluated at 2026-10-27T10:00:00Z
+- **THEN** the result is 2026-10-28T12:00:00Z
 
 #### Scenario: Date plus hours
 - **WHEN** `{TODAY + 9::HOURS}` is evaluated on 2026-10-27 in UTC+02:00

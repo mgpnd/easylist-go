@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Export request contents
-An export request SHALL contain the list name, the ordered field names to export, the filter text (possibly empty), the sort entries, the file format (CSV or XLSX), the moment the export was requested (possibly unset), and the client's UTC offset in minutes (possibly unset). It SHALL NOT contain a limit, an offset, or the list's scope.
+An export request SHALL contain the list name, the ordered field names to export, the filter text (possibly empty), the sort entries, the file format (CSV or XLSX), the moment at which relative time values are evaluated (possibly unset), and the client's UTC offset in minutes (possibly unset). It SHALL NOT contain a limit, an offset, or the list's scope.
 
 #### Scenario: Request built from a mutation
 - **WHEN** a client asks to export fields `name, country` of `users` filtered by `name CONTAINS 'a'` as XLSX with timezone `120`

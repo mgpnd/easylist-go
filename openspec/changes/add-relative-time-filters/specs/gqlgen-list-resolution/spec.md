@@ -22,7 +22,7 @@
 - **THEN** the field resolves to an error stating the allowed range, and no query runs
 
 ### Requirement: One-call export resolver
-For each list the library SHALL provide a function that an application mutation resolver calls with the request context, the runtime, and the `<P>ExportInput`. It SHALL validate the input into an export request whose request moment is the runtime clock's current time in UTC and whose UTC offset is the input's `timezone`, pass it to the application's exporter, and return `ExportJob` with the exporter's job identifier.
+For each list the library SHALL provide a function that an application mutation resolver calls with the request context, the runtime, and the `<P>ExportInput`. It SHALL validate the input into an export request whose request moment is the input's `asOf`, or the runtime clock's current time when `asOf` is absent, stored in UTC, and whose UTC offset is the input's `timezone`, pass it to the application's exporter, and return `ExportJob` with the exporter's job identifier.
 
 #### Scenario: Export accepted
 - **WHEN** the mutation is called with valid fields and the exporter returns `job-42`
@@ -36,6 +36,10 @@ For each list the library SHALL provide a function that an application mutation 
 - **WHEN** the runtime has no exporter and the export function is called
 - **THEN** it returns an error stating that exports are not configured
 
-#### Scenario: Request moment recorded
-- **WHEN** the mutation is called with `timezone: 120` while the runtime clock reads 2026-10-27T10:00:00+02:00
+#### Scenario: Request moment defaults to server time
+- **WHEN** the mutation is called with `timezone: 120` and no `asOf` while the runtime clock reads 2026-10-27T10:00:00+02:00
 - **THEN** the exporter receives a request with request moment 2026-10-27T08:00:00Z and offset `120`
+
+#### Scenario: Client-supplied asOf
+- **WHEN** the mutation is called with `asOf: "2026-10-01T09:00:00+02:00"`
+- **THEN** the exporter receives a request with request moment 2026-10-01T07:00:00Z, whatever the runtime clock reads

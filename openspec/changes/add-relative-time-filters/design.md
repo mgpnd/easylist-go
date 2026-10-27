@@ -43,7 +43,12 @@ func (v *TimeValue) Eval(now time.Time, weekStart time.Weekday) (time.Time, erro
 A brace expression with no time keywords or durations is evaluated with `math/big.Rat` and becomes a `LiteralNumber` whose text is the exact decimal result. A quotient whose denominator has prime factors other than 2 and 5 has no finite decimal form and is rejected. This keeps every driver unchanged for numbers and keeps numeric fields exact.
 
 ### Types are checked in the parser
-Each brace sub-expression has a static type: number, duration of a unit, date, or timestamp. Grammar actions build typed nodes and return errors at the operator position (through the existing `parseState` error path). "Date + HOURS → timestamp" is known statically, so `IsDate()` never depends on the reference time. Integer-only rules (the amount of `n::UNIT`, the multiplier of a duration, exact division of a duration) are checked while folding the integer parts, so `{TODAY + 2*7::DAYS}` folds to one `+14::DAYS` step.
+Each brace sub-expression has a static type: number, duration, date, or timestamp. Grammar actions build typed nodes and return errors at the operator position (through the existing `parseState` error path). "Date + HOURS → timestamp" is known statically, so `IsDate()` never depends on the reference time. Integer-only rules (the amount of `n::UNIT`, the multiplier of a duration, exact division of a duration) are checked while folding the integer parts, so `{TODAY + 2*7::DAYS}` folds to one `+14::DAYS` step.
+
+### Durations are ordered lists of unit amounts
+A duration is a list of `(amount, unit)` terms in the order written. `+` concatenates the lists, `-` concatenates the negated right-hand list, unary `-` negates every term, `* k` multiplies every term, and `/ k` divides every term and fails unless each divides exactly. Terms are never merged or reordered, so adding `(1::DAYS + 2::HOURS)` applies the day step and then the hour step, exactly like `+ 1::DAYS + 2::HOURS`. Calendar days and elapsed hours do not commute across a DST change, so the order must be preserved. A duration is date-preserving only if every term is `DAYS` or `BUSINESS_DAYS`.
+
+*Alternative:* allowing only same-unit durations to be added together. This was rejected as needlessly strict: a mixed duration has a clear meaning once its terms are applied in order.
 
 ### Keywords only on the value side
 The lexer keeps scanning `today` as `tIDENT`. A new grammar alternative `tIDENT ordinary_op tIDENT` (restricted to comparison operators in the action) maps the right-hand identifier through a keyword table and reports an unknown word at its position. A quoted identifier on the right is rejected. This avoids reserving words that are likely to be column names (`now`, `today`). The cost is that the action, rather than the grammar, rejects `CONTAINS TODAY`. Both still produce a positioned syntax error.
@@ -61,7 +66,9 @@ The lexer keeps scanning `today` as `tIDENT`. A new grammar alternative `tIDENT 
 - `easylistgql.ListInput.Timezone *int`: when set, the resolver sets `req.Now = rt.Now().In(time.FixedZone("", m*60))`. A shared `easylist.UTCOffset(minutes) (*time.Location, error)` validates the range -720…840 for both GraphQL and exports.
 
 ### Exports record AsOf and Timezone
-`ExportRequest` gains `AsOf time.Time` with tag `json:"asOf,omitzero"` and `Timezone *int` with tag `json:"timezone,omitempty"`. The export resolver sets `AsOf = rt.Now().UTC().Round(0)`, which drops the monotonic reading so the JSON round trip is equal. `ValidateExport` builds `Request.Now = AsOf.In(zone)` when `AsOf` is set, so the mutation and the worker plan identically. The worker (`easylistexport.Run`) fills a zero `Now` from `rt.Now()` in the request zone, and `WeekStart` from the runtime, before planning.
+`<P>ExportInput` has an optional `asOf: Time`, which uses the plugin's timestamp scalar (`Scalars.Time`). The SDL writer marks that scalar as used whenever it writes an export input, so it is always declared. The resolver uses `in.AsOf` when it is set, and otherwise `rt.Now()`. A client can therefore export "as of" the moment it loaded the list.
+
+`ExportRequest` gains `AsOf time.Time` with tag `json:"asOf,omitzero"` and `Timezone *int` with tag `json:"timezone,omitempty"`. The export resolver stores the chosen moment as `AsOf = t.UTC().Round(0)`, which drops the monotonic reading so the JSON round trip is equal. `ValidateExport` builds `Request.Now = AsOf.In(zone)` when `AsOf` is set, so the mutation and the worker plan identically. The worker (`easylistexport.Run`) fills a zero `Now` from `rt.Now()` in the request zone, and `WeekStart` from the runtime, before planning.
 
 *Alternative:* resolve the filter to fixed text at request time. This was rejected because it loses whole-day semantics and changes the filter the user wrote.
 

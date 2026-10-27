@@ -18,8 +18,12 @@ For each list the plugin SHALL generate `<P>SortField` (one value per SQL field 
 - **THEN** it has an optional `timezone: Int` field
 
 ### Requirement: Export input and job types
-For each list the plugin SHALL generate `<P>ExportField` (one value per SQL and calculated field) and `input <P>ExportInput { fields: [<P>ExportField!]!, filter: String, sort: [<P>Sort!], format: ExportFormat!, timezone: Int }`, with `timezone` documented as for `<P>ListInput`. It SHALL generate once `enum ExportFormat { CSV XLSX }` and `type ExportJob { id: ID! }`.
+For each list the plugin SHALL generate `<P>ExportField` (one value per SQL and calculated field) and `input <P>ExportInput { fields: [<P>ExportField!]!, filter: String, sort: [<P>Sort!], format: ExportFormat!, timezone: Int, asOf: Time }`, with `timezone` documented as for `<P>ListInput` and the optional `asOf` documented as the moment at which relative time values are evaluated, defaulting to the server's current time. `asOf` SHALL use the plugin's timestamp scalar, so that scalar is declared whenever an export input is generated. It SHALL generate once `enum ExportFormat { CSV XLSX }` and `type ExportJob { id: ID! }`.
 
 #### Scenario: Export field enum
 - **WHEN** `users` has SQL fields `id`, `name` and calculated field `display`
 - **THEN** `UsersExportField` has values `ID`, `NAME`, and `DISPLAY`
+
+#### Scenario: Optional asOf
+- **WHEN** the plugin generates `UsersExportInput` for a list with no timestamp fields
+- **THEN** it has an optional `asOf: Time` field and the schema declares the `Time` scalar
