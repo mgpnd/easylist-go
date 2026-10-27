@@ -41,7 +41,19 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 		return nil, fmt.Errorf("unsupported operator %q for field %q at position %d", operatorText[operator], name, node.OperatorPos())
 	}
 
-	if operator == filter.OpContains {
+	// A NULL comparison is valid for every type, nullable or not, and binds no
+	// argument. The parser only puts NULL after = and !=, but the AST allows more.
+	if value.Kind() == filter.LiteralNull {
+		switch operator {
+		case filter.OpEq:
+			return goqu.L("? IS NULL", column), nil
+		case filter.OpNeq:
+			return goqu.L("? IS NOT NULL", column), nil
+		}
+		return unsupported()
+	}
+
+	if operator == filter.OpContains || operator == filter.OpExcludes {
 		if field.Type != easylist.Text {
 			return unsupported()
 		}
@@ -49,8 +61,13 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 		if err != nil {
 			return nil, err
 		}
-		pattern := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(arg.(string))
-		return goqu.L(`? ILIKE ? ESCAPE E'\\'`, column, "%"+pattern+"%"), nil
+		pattern := "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(arg.(string)) + "%"
+		if operator == filter.OpExcludes {
+			// NOT ILIKE is NULL for a NULL field; COALESCE makes such rows match
+			// while emitting the author SQL only once.
+			return goqu.L(`COALESCE(? NOT ILIKE ? ESCAPE E'\\', TRUE)`, column, pattern), nil
+		}
+		return goqu.L(`? ILIKE ? ESCAPE E'\\'`, column, pattern), nil
 	}
 
 	ordered := slices.Contains([]easylist.Type{easylist.Integer, easylist.Float, easylist.Numeric, easylist.Date, easylist.Timestamp}, field.Type)
@@ -89,9 +106,10 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 		// list; native goqu Boolean equality emits IS TRUE/FALSE.
 		return goqu.L("? = ?", column, arg), nil
 	case filter.OpNeq:
-		// goqu's Neq emits != and, for Booleans, IS NOT TRUE/FALSE, which also
-		// matches NULL. Plain <> keeps SQL semantics: NULL rows never match.
-		return goqu.L("? <> ?", column, arg), nil
+		// != matches exactly the rows = does not, NULL included. goqu's Neq
+		// emits != and, for Booleans, IS NOT TRUE/FALSE, which drops the bound
+		// argument; an explicit IS DISTINCT FROM keeps every value bound.
+		return goqu.L("? IS DISTINCT FROM ?", column, arg), nil
 	case filter.OpGt:
 		return goqu.L("? > ?", column, arg), nil
 	case filter.OpGte:

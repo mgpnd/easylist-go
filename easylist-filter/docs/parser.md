@@ -132,7 +132,7 @@ returns its inner expression, so `(a = 1 OR b = 2) AND c = 3` is just an
 
 ### Predicates
 
-The two `predicate` rules build a `predicateNode`:
+The four `predicate` rules build a `predicateNode`:
 
 - `tIDENT ordinary_op value` covers `=`, `!=`, `>`, `>=`, `<`, `<=`,
   `CONTAINS` and `EXCLUDES`. The `ordinary_op` rules translate each token to
@@ -140,6 +140,11 @@ The two `predicate` rules build a `predicateNode`:
   same for `tSTRING`, `tNUMBER` and `tBOOL`.
 - `tIDENT tBETWEEN tSTRING` is a separate rule, so the grammar itself enforces
   that `BETWEEN` takes a string.
+- `tIDENT '=' tNULL` and `tIDENT tNEQ tNULL` build an `OpEq` or `OpNeq`
+  predicate whose value is a `LiteralNull` literal, with the keyword's source
+  spelling as its text and the keyword's position. `tNULL` is not a `value`
+  alternative, so the grammar itself rejects `NULL` after any other operator
+  and as a field name.
 
 The resulting `predicateNode` keeps the field token (name, quoted flag,
 position), the operator and its position, and a `Literal` with the decoded
@@ -176,7 +181,7 @@ The rewording uses the `tokenDisplay` map, which turns generated token names
 into user-facing ones: `$end` becomes "end of input", `tIDENT` becomes
 "field", and `tSTRING`, `tNUMBER` and `tBOOL` become "string", "number" and
 "boolean". `tNEQ`, `tGTE` and `tLTE` print as `'!='`, `'>='` and `'<='`, and
-the keyword tokens print as their keyword, such as `AND` and `OR`. Quoted
+the keyword tokens print as their keyword, such as `AND`, `OR`, and `NULL`. Quoted
 character tokens like `'('` are not in the map and print as they are. A list
 of expected tokens reads "expected a, b, or c".
 
@@ -186,6 +191,14 @@ checks the next token, so goyacc lists only what may follow an `or_expr`.
 Every `or_expr` ends in an `and_expr`, so wherever `OR` may follow, `AND` may
 too, and `describeSyntaxError` inserts `AND` before `OR`. For example,
 `(a = 1 b = 2)` reports "unexpected field, expected AND, OR, or ')'".
+
+Default reductions also leave `NULL` out of the expected list after `=` or
+`!=`: once the parser sees a token that cannot follow the operator, it has
+already reduced it to `ordinary_op`, so `a =` reports "expected string,
+number, or boolean". The message is still correct, just less complete, and
+no rewrite rule adds `NULL` back. A misplaced `NULL` is reported at its own
+position, for example `age > NULL` gives "unexpected NULL, expected string,
+number, or boolean at position 7".
 
 `parseState.Lex` records the most recent token it returned and whether it
 reached the end of input, which is what the rules above use to pick a

@@ -1,6 +1,7 @@
 package sqlgoqu
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -85,18 +86,21 @@ func TestBuildPredicateTypesAndOperators(t *testing.T) {
 		{"active = TRUE", `t."active" = $1`, []any{true}},
 		{"active = false", `t."active" = $1`, []any{false}},
 		{"uid = '0B6C4C1E-3D8E-4F43-9D5A-2A8A0D1D2C3B'", `t."uid" = $1`, []any{"0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b"}},
-		{"uid != '0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b'", `t."uid" <> $1`, []any{"0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b"}},
+		{"uid != '0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b'", `t."uid" IS DISTINCT FROM $1`, []any{"0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b"}},
 		{"status = 'blocked'", `t."status" = $1`, []any{"blocked"}},
-		{"status != 'active'", `t."status" <> $1`, []any{"active"}},
-		{"age != -9223372036854775808", `t."age" <> $1`, []any{int64(-9223372036854775808)}},
-		{"score != -1.25", `t."score" <> $1`, []any{float64(-1.25)}},
-		{"price != 12345678901234567890.123456789", `t."price" <> $1::numeric`, []any{"12345678901234567890.123456789"}},
-		{"day != '2024-02-29'", `t."day" <> $1`, []any{day}},
-		{"at != '2026-01-01T00:00:00Z'", `t."at" <> $1`, []any{at}},
-		{"name != 'O''Reilly'", `t."name" <> $1`, []any{"O'Reilly"}},
-		{"active != TRUE", `t."active" <> $1`, []any{true}},
-		{"active!=false", `t."active" <> $1`, []any{false}},
+		{"status != 'active'", `t."status" IS DISTINCT FROM $1`, []any{"active"}},
+		{"age != -9223372036854775808", `t."age" IS DISTINCT FROM $1`, []any{int64(-9223372036854775808)}},
+		{"score != -1.25", `t."score" IS DISTINCT FROM $1`, []any{float64(-1.25)}},
+		{"price != 12345678901234567890.123456789", `t."price" IS DISTINCT FROM $1::numeric`, []any{"12345678901234567890.123456789"}},
+		{"day != '2024-02-29'", `t."day" IS DISTINCT FROM $1`, []any{day}},
+		{"at != '2026-01-01T00:00:00Z'", `t."at" IS DISTINCT FROM $1`, []any{at}},
+		{"name != 'O''Reilly'", `t."name" IS DISTINCT FROM $1`, []any{"O'Reilly"}},
+		{"active != TRUE", `t."active" IS DISTINCT FROM $1`, []any{true}},
+		{"active!=false", `t."active" IS DISTINCT FROM $1`, []any{false}},
 		{"name CONTAINS 'needle'", `t."name" ILIKE $1 ESCAPE E'\\'`, []any{"%needle%"}},
+		{"name EXCLUDES 'needle'", `COALESCE(t."name" NOT ILIKE $1 ESCAPE E'\\', TRUE)`, []any{"%needle%"}},
+		{"full EXCLUDES 'Lee'", `COALESCE((t.first || ' ' || t.last) NOT ILIKE $1 ESCAPE E'\\', TRUE)`, []any{"%Lee%"}},
+		{"full != 'Ann Lee'", `(t.first || ' ' || t.last) IS DISTINCT FROM $1`, []any{"Ann Lee"}},
 		{"full = 'Ann Lee'", `(t.first || ' ' || t.last) = $1`, []any{"Ann Lee"}},
 		{"age BETWEEN ' 40, 30 '", `t."age" BETWEEN $1 AND $2`, []any{int64(40), int64(30)}},
 		{"score BETWEEN '-1.5,2.5'", `t."score" BETWEEN $1 AND $2`, []any{float64(-1.5), float64(2.5)}},
@@ -114,6 +118,60 @@ func TestBuildPredicateTypesAndOperators(t *testing.T) {
 	}
 }
 
+// NULL comparisons compile for every type, although no field here is declared
+// nullable, and bind no argument. The enum's declared values are not consulted.
+func TestBuildPredicateNull(t *testing.T) {
+	for _, field := range []string{"uid", "name", "age", "score", "price", "day", "at", "active", "status"} {
+		for _, tc := range []struct{ op, clause string }{{"=", "IS NULL"}, {"!=", "IS NOT NULL"}} {
+			input := field + " " + tc.op + " NULL"
+			t.Run(input, func(t *testing.T) {
+				sql, args := renderPredicate(t, input)
+				if want := `WHERE t."` + field + `" ` + tc.clause; !strings.HasSuffix(sql, want) || len(args) != 0 {
+					t.Fatalf("got %q %#v; want suffix %q and no args", sql, args, want)
+				}
+			})
+		}
+	}
+	sql, args := renderPredicate(t, "full = null")
+	if !strings.HasSuffix(sql, `WHERE (t.first || ' ' || t.last) IS NULL`) || len(args) != 0 {
+		t.Fatalf("author SQL: %q %#v", sql, args)
+	}
+}
+
+// nullOperator rewrites a parsed NULL predicate's operator, which the parser
+// itself never allows.
+type nullOperator struct {
+	filter.Predicate
+	op filter.PredicateOp
+}
+
+func (n nullOperator) Operator() filter.PredicateOp { return n.op }
+
+func TestBuildPredicateRejectsNullWithOtherOperators(t *testing.T) {
+	for _, tc := range []struct {
+		field string
+		op    filter.PredicateOp
+		text  string
+	}{
+		{"age", filter.OpGt, ">"}, {"age", filter.OpLte, "<="}, {"age", filter.OpBetween, "BETWEEN"},
+		{"name", filter.OpContains, "CONTAINS"}, {"name", filter.OpExcludes, "EXCLUDES"},
+	} {
+		t.Run(tc.field+" "+tc.text, func(t *testing.T) {
+			node := nullOperator{parsePredicate(t, tc.field+" = NULL"), tc.op}
+			expr, err := buildPredicate(predicatePlan(t), node)
+			pos := fmt.Sprintf("position %d", len(tc.field)+2)
+			if expr != nil || err == nil {
+				t.Fatalf("want an error, got %#v", expr)
+			}
+			for _, want := range []string{"unsupported operator", `"` + tc.text + `"`, `"` + tc.field + `"`, pos} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %s", err, want)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildPredicateEscaping(t *testing.T) {
 	sql, args := renderPredicate(t, `name CONTAINS 'a%_\b'`)
 	if !strings.Contains(sql, `ILIKE $1 ESCAPE E'\\'`) || !reflect.DeepEqual(args, []any{`%a\%\_\\b%`}) {
@@ -122,6 +180,10 @@ func TestBuildPredicateEscaping(t *testing.T) {
 	sql, args = renderPredicate(t, `name CONTAINS '50%_off'`)
 	if !reflect.DeepEqual(args, []any{`%50\%\_off%`}) {
 		t.Fatalf("CONTAINS scenario: %q %#v", sql, args)
+	}
+	sql, args = renderPredicate(t, `name EXCLUDES '50%_off'`)
+	if !strings.Contains(sql, `COALESCE(t."name" NOT ILIKE $1 ESCAPE E'\\', TRUE)`) || !reflect.DeepEqual(args, []any{`%50\%\_off%`}) {
+		t.Fatalf("EXCLUDES scenario: %q %#v", sql, args)
 	}
 	sql, args = renderPredicate(t, `name = 'x''; DROP TABLE users; --'`)
 	if strings.Contains(sql, "DROP") || !reflect.DeepEqual(args, []any{"x'; DROP TABLE users; --"}) {
@@ -164,6 +226,7 @@ func TestBuildPredicateRejectsBadValues(t *testing.T) {
 		{"active = 1", "position 10"},
 		{"age != 1.5", "position 8"},
 		{"name != 1", "position 9"},
+		{"name EXCLUDES 1", "position 15"},
 		{"active != 'true'", "position 11"},
 		{"day != '2025-02-29'", "position 8"},
 		{"absent = 1", "position 1"},
@@ -186,9 +249,13 @@ func TestBuildPredicateRejectsOperators(t *testing.T) {
 		{"active BETWEEN 'true,false'", "BETWEEN", "active", "position 8"},
 		{"name > 'a'", ">", "name", "position 6"},
 		{"name BETWEEN 'a,b'", "BETWEEN", "name", "position 6"},
-		{"name EXCLUDES 'a'", "EXCLUDES", "name", "position 6"},
 		{"age CONTAINS 1", "CONTAINS", "age", "position 5"},
 		{"age EXCLUDES 1", "EXCLUDES", "age", "position 5"},
+		{"price EXCLUDES 1", "EXCLUDES", "price", "position 7"},
+		{"active EXCLUDES TRUE", "EXCLUDES", "active", "position 8"},
+		{"uid EXCLUDES 'a'", "EXCLUDES", "uid", "position 5"},
+		{"status EXCLUDES 'act'", "EXCLUDES", "status", "position 8"},
+		{"day EXCLUDES '2024-01-01'", "EXCLUDES", "day", "position 5"},
 		{"uid > 'a'", ">", "uid", "position 5"},
 		{"uid CONTAINS 'a'", "CONTAINS", "uid", "position 5"},
 		{"status >= 'active'", ">=", "status", "position 8"},

@@ -71,7 +71,7 @@ Each join must return at most one row per base row. Use a `LEFT JOIN` on a uniqu
 
 | Type | Go value | Filter operators |
 | --- | --- | --- |
-| `Text` | `string` | `=`, `!=`, `CONTAINS` |
+| `Text` | `string` | `=`, `!=`, `CONTAINS`, `EXCLUDES` |
 | `Integer` | `int64` | `=`, `!=`, `>`, `>=`, `<`, `<=`, `BETWEEN` |
 | `Float` | `float64` | same as `Integer` |
 | `Numeric` | `string` (exact decimal text) | same as `Integer` |
@@ -81,7 +81,9 @@ Each join must return at most one row per base row. Use a `LEFT JOIN` on a uniqu
 | `UUID` | `string` | `=`, `!=` |
 | `Enum` | `string` (a declared value) | `=`, `!=` |
 
-A NULL is an absent value. A NULL in a field not declared `Nullable` fails the request with an error naming the field, which usually points at a join or definition mistake. Filters cannot compare with NULL.
+Every type also accepts `= NULL` and `!= NULL`, whether or not the field is declared `Nullable`.
+
+A NULL is an absent value. A NULL in a field not declared `Nullable` fails the request with an error naming the field, which usually points at a join or definition mistake. Filters compare with NULL through the `NULL` keyword: `country = NULL` matches rows where `country` is NULL, and `country != NULL` matches rows where it is not. `!=` matches exactly the rows `=` does not, so `country != 'FR'` also matches rows where `country` is NULL; add `AND country != NULL` to leave them out. `EXCLUDES` matches rows that do not contain its value case-insensitively, and rows where the field is NULL. The other operators never match NULL.
 
 ## Run requests
 

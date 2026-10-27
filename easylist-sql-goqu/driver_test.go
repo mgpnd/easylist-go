@@ -121,8 +121,22 @@ func TestCompilePage(t *testing.T) {
 			name: "filter on joined field",
 			def:  usersList, req: easylist.Request{},
 			filter: "country != 'FR'",
-			sql:    `SELECT u."id" AS "id" FROM users AS u LEFT JOIN countries c ON c.id = u.country_id WHERE (c.name) <> $1 ORDER BY u."id" ASC LIMIT $2 OFFSET $3`,
+			sql:    `SELECT u."id" AS "id" FROM users AS u LEFT JOIN countries c ON c.id = u.country_id WHERE (c.name) IS DISTINCT FROM $1 ORDER BY u."id" ASC LIMIT $2 OFFSET $3`,
 			args:   []any{"FR", int64(100), int64(0)},
+		},
+		{
+			name: "NULL comparisons",
+			def:  usersList, req: easylist.Request{Limit: intp(10), Offset: intp(0)},
+			filter: "country = NULL AND name != NULL",
+			sql:    `SELECT u."id" AS "id" FROM users AS u LEFT JOIN countries c ON c.id = u.country_id WHERE ((c.name) IS NULL AND u."name" IS NOT NULL) ORDER BY u."id" ASC LIMIT $1 OFFSET $2`,
+			args:   []any{int64(10), int64(0)},
+		},
+		{
+			name: "EXCLUDES with NULL test",
+			def:  usersList, req: easylist.Request{},
+			filter: "country = NULL OR country EXCLUDES 'fr'",
+			sql:    `SELECT u."id" AS "id" FROM users AS u LEFT JOIN countries c ON c.id = u.country_id WHERE ((c.name) IS NULL OR COALESCE((c.name) NOT ILIKE $1 ESCAPE E'\\', TRUE)) ORDER BY u."id" ASC LIMIT $2 OFFSET $3`,
+			args:   []any{"%fr%", int64(100), int64(0)},
 		},
 	}
 	for _, tc := range cases {

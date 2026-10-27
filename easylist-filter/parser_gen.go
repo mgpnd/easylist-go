@@ -28,6 +28,7 @@ const tEXCLUDES = 57354
 const tBETWEEN = 57355
 const tAND = 57356
 const tOR = 57357
+const tNULL = 57358
 
 var yyToknames = [...]string{
 	"$end",
@@ -45,6 +46,7 @@ var yyToknames = [...]string{
 	"tBETWEEN",
 	"tAND",
 	"tOR",
+	"tNULL",
 	"'='",
 	"'>'",
 	"'<'",
@@ -58,7 +60,7 @@ const yyEofCode = 1
 const yyErrCode = 2
 const yyInitialStackSize = 16
 
-//line grammar.y:61
+//line grammar.y:63
 
 //line yacctab:1
 var yyExca = [...]int8{
@@ -69,46 +71,50 @@ var yyExca = [...]int8{
 
 const yyPrivate = 57344
 
-const yyLast = 29
+const yyLast = 31
 
 var yyAct = [...]int8{
-	14, 16, 18, 19, 20, 12, 8, 7, 13, 15,
-	17, 23, 8, 9, 4, 25, 26, 27, 3, 2,
-	28, 1, 6, 24, 22, 11, 10, 21, 5,
+	14, 16, 18, 19, 20, 12, 8, 7, 8, 13,
+	15, 17, 23, 30, 29, 9, 4, 25, 26, 27,
+	3, 2, 28, 6, 1, 24, 22, 11, 10, 21,
+	5,
 }
 
 var yyPact = [...]int16{
-	3, -32768, -3, -1, -32768, -32768, 3, -8, 3, 3,
-	-9, 10, 15, -32768, -32768, -32768, -32768, -32768, -32768, -32768,
-	-32768, -1, -32768, -32768, -32768, -32768, -32768, -32768, -32768,
+	3, -32768, -7, 1, -32768, -32768, 3, -8, 3, 3,
+	-9, 12, 17, -2, -3, -32768, -32768, -32768, -32768, -32768,
+	-32768, 1, -32768, -32768, -32768, -32768, -32768, -32768, -32768, -32768,
+	-32768,
 }
 
 var yyPgo = [...]int8{
-	0, 19, 18, 14, 28, 25, 23, 21,
+	0, 21, 20, 16, 30, 27, 25, 24,
 }
 
 var yyR1 = [...]int8{
 	0, 7, 1, 1, 2, 2, 3, 3, 4, 4,
-	5, 5, 5, 5, 5, 5, 5, 5, 6, 6,
-	6,
+	4, 4, 5, 5, 5, 5, 5, 5, 5, 5,
+	6, 6, 6,
 }
 
 var yyR2 = [...]int8{
 	0, 1, 1, 3, 1, 3, 1, 3, 3, 3,
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	1,
+	3, 3, 1, 1, 1, 1, 1, 1, 1, 1,
+	1, 1, 1,
 }
 
 var yyChk = [...]int16{
-	-32768, -7, -1, -2, -3, -4, 19, 4, 15, 14,
-	-1, -5, 13, 16, 8, 17, 9, 18, 10, 11,
-	12, -2, -3, 20, -6, 5, 6, 7, 5,
+	-32768, -7, -1, -2, -3, -4, 20, 4, 15, 14,
+	-1, -5, 13, 17, 8, 18, 9, 19, 10, 11,
+	12, -2, -3, 21, -6, 5, 6, 7, 5, 16,
+	16,
 }
 
 var yyDef = [...]int8{
 	0, -2, 1, 2, 4, 6, 0, 0, 0, 0,
-	0, 0, 0, 10, 11, 12, 13, 14, 15, 16,
-	17, 3, 5, 7, 8, 18, 19, 20, 9,
+	0, 0, 0, 12, 13, 14, 15, 16, 17, 18,
+	19, 3, 5, 7, 8, 20, 21, 22, 9, 10,
+	11,
 }
 
 var yyTok1 = [...]int8{
@@ -116,14 +122,14 @@ var yyTok1 = [...]int8{
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-	19, 20, 3, 3, 3, 3, 3, 3, 3, 3,
+	20, 21, 3, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-	18, 16, 17,
+	19, 17, 18,
 }
 
 var yyTok2 = [...]int8{
 	2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-	12, 13, 14, 15,
+	12, 13, 14, 15, 16,
 }
 
 var yyTok3 = [...]int8{
@@ -504,68 +510,80 @@ yydefault:
 			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpBetween, operatorPos: yyDollar[2].tok.pos, value: Literal{kind: LiteralString, text: yyDollar[3].tok.text, pos: yyDollar[3].tok.pos}}
 		}
 	case 10:
-		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:45
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:42
 		{
-			yyVAL.op = opAt{OpEq, yyDollar[1].tok.pos}
+			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpEq, operatorPos: yyDollar[2].tok.pos, value: Literal{kind: LiteralNull, text: yyDollar[3].tok.text, pos: yyDollar[3].tok.pos}}
 		}
 	case 11:
-		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:46
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:43
 		{
-			yyVAL.op = opAt{OpNeq, yyDollar[1].tok.pos}
+			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpNeq, operatorPos: yyDollar[2].tok.pos, value: Literal{kind: LiteralNull, text: yyDollar[3].tok.text, pos: yyDollar[3].tok.pos}}
 		}
 	case 12:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:47
 		{
-			yyVAL.op = opAt{OpGt, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpEq, yyDollar[1].tok.pos}
 		}
 	case 13:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:48
 		{
-			yyVAL.op = opAt{OpGte, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpNeq, yyDollar[1].tok.pos}
 		}
 	case 14:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:49
 		{
-			yyVAL.op = opAt{OpLt, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpGt, yyDollar[1].tok.pos}
 		}
 	case 15:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:50
 		{
-			yyVAL.op = opAt{OpLte, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpGte, yyDollar[1].tok.pos}
 		}
 	case 16:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:51
 		{
-			yyVAL.op = opAt{OpContains, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpLt, yyDollar[1].tok.pos}
 		}
 	case 17:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:52
 		{
-			yyVAL.op = opAt{OpExcludes, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpLte, yyDollar[1].tok.pos}
 		}
 	case 18:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:56
+//line grammar.y:53
 		{
-			yyVAL.lit = Literal{kind: LiteralString, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpContains, yyDollar[1].tok.pos}
 		}
 	case 19:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:57
+//line grammar.y:54
 		{
-			yyVAL.lit = Literal{kind: LiteralNumber, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpExcludes, yyDollar[1].tok.pos}
 		}
 	case 20:
 		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:58
+		{
+			yyVAL.lit = Literal{kind: LiteralString, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+		}
+	case 21:
+		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:59
+		{
+			yyVAL.lit = Literal{kind: LiteralNumber, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+		}
+	case 22:
+		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:60
 		{
 			yyVAL.lit = Literal{kind: LiteralBool, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
 		}

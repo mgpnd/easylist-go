@@ -25,6 +25,7 @@ const (
 	tokLParen
 	tokRParen
 	tokNeq
+	tokNull
 )
 
 type token struct {
@@ -37,7 +38,7 @@ type token struct {
 var keywords = map[string]tokenKind{
 	"TRUE": tokBool, "FALSE": tokBool,
 	"CONTAINS": tokContains, "EXCLUDES": tokExcludes, "BETWEEN": tokBetween,
-	"AND": tokAnd, "OR": tokOr,
+	"AND": tokAnd, "OR": tokOr, "NULL": tokNull,
 }
 
 // lexer scans filter syntax without interpreting predicates or value types.

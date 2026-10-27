@@ -63,8 +63,11 @@ List-author SQL must not contain `$n` placeholders of its own, because they woul
 
 ## PostgreSQL semantics
 
-- `!=` compiles to `<>`, so a row whose field is NULL never matches; `IS DISTINCT FROM` is not used.
+- `!=` compiles to `IS DISTINCT FROM`, so it matches exactly the rows `=` does not, including rows whose field is NULL. To skip NULL rows as `<>` did, add `AND x != NULL`, as in `country != 'FR' AND country != NULL`.
+- `= NULL` compiles to `IS NULL` and `!= NULL` to `IS NOT NULL`, with no bound argument. Every type accepts them, whether or not the field is declared `Nullable`.
 - `CONTAINS` on text compiles to `ILIKE '%…%' ESCAPE E'\\'`: case-insensitive, with `%`, `_`, and `\` in the literal matched literally.
+- `EXCLUDES` on text compiles to `COALESCE(x NOT ILIKE '%…%' ESCAPE E'\\', TRUE)`, with the same escaping as `CONTAINS`. It matches rows that do not contain the literal and rows whose field is NULL, and emits the field's SQL once.
+- `>`, `>=`, `<`, `<=`, `BETWEEN`, and `CONTAINS` never match a NULL field.
 - Numeric literals are bound as exact decimal strings and cast with `::numeric`.
 - Boolean equality compares with a bound `true` or `false` rather than emitting `IS TRUE`.
 - Dates (`YYYY-MM-DD`) and timestamps (RFC 3339 with an offset) are bound as `time.Time`. UUIDs (canonical hyphenated hex) and enums (a declared value) are bound as strings; PostgreSQL infers their type from the column.
