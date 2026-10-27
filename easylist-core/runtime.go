@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 // Runtime wires a driver and the application's database handle.
@@ -11,6 +12,21 @@ type Runtime struct {
 	Driver   Driver
 	DB       Queryer
 	Exporter Exporter // Optional; needed only to accept export requests.
+	// Clock returns the reference time for requests without one, in the
+	// time zone relative values are evaluated in. Nil means time.Now, the
+	// server's local time.
+	Clock func() time.Time
+	// WeekStart is the first day of the week for requests without one. Nil
+	// means Monday.
+	WeekStart *time.Weekday
+}
+
+// Now returns the clock's current time, or time.Now when there is no clock.
+func (rt *Runtime) Now() time.Time {
+	if rt.Clock != nil {
+		return rt.Clock()
+	}
+	return time.Now()
 }
 
 // Queryer runs a query. The library never opens connections itself.
@@ -52,9 +68,16 @@ type Result struct {
 }
 
 // Fetch plans req and runs the page query when want.Rows is set and the count
-// query when want.Count is set. Planning errors are returned before any query
-// runs; database errors are wrapped with the list name.
+// query when want.Count is set. A request without Now or WeekStart gets the
+// runtime's. Planning errors are returned before any query runs; database
+// errors are wrapped with the list name.
 func (rt *Runtime) Fetch(ctx context.Context, l *CompiledList, req Request, want Want) (*Result, error) {
+	if req.Now.IsZero() {
+		req.Now = rt.Now()
+	}
+	if req.WeekStart == nil {
+		req.WeekStart = rt.WeekStart
+	}
 	var page, count *Plan
 	var err error
 	if want.Rows {

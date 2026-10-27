@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
 	filter "github.com/mgpnd/easylist-go/easylist-filter"
@@ -79,6 +80,16 @@ func firstPage(ctx context.Context, reg *easylist.Registry, db *sql.DB, driver e
 	return res.Rows, res.Total, nil
 }
 
+func newRuntime(driver easylist.Driver, db *sql.DB) *easylist.Runtime {
+	sunday := time.Sunday
+	return &easylist.Runtime{
+		Driver:    driver,
+		DB:        easylist.SQLDB(db),
+		Clock:     func() time.Time { return time.Now().UTC() },
+		WeekStart: &sunday,
+	}
+}
+
 func TestReadmeSnippets(t *testing.T) {
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
@@ -96,6 +107,9 @@ func TestReadmeSnippets(t *testing.T) {
 		if !strings.Contains(string(self), string(b[1])) {
 			t.Errorf("README snippet is not in readme_example_test.go:\n%s", b[1])
 		}
+	}
+	if rt := newRuntime(nil, nil); rt.WeekStart == nil || *rt.WeekStart != time.Sunday || rt.Now().Location() != time.UTC {
+		t.Errorf("runtime = %+v", rt)
 	}
 	if _, err := newRegistry(); err != nil {
 		t.Fatal(err)
