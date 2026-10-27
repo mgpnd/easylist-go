@@ -63,7 +63,7 @@ A driver SHALL accept these operators and reject any other with an error naming 
 - **THEN** compilation succeeds and the filter matches only rows where `name` is NULL
 
 ### Requirement: Literal conversion per type
-A driver SHALL convert each filter literal to its field's type and reject mismatches with an error at the literal's position: text, uuid, enum, date, timestamp need a string; integer, float, numeric need a number; boolean needs `TRUE` or `FALSE`. Integers SHALL fit 64 bits, floats SHALL be finite, numerics SHALL keep exact digits, dates SHALL be `YYYY-MM-DD`, timestamps SHALL be RFC 3339 with an offset, uuids SHALL be canonical hyphenated hex, and enums SHALL be a declared value. For an expression literal the driver SHALL use the plan's evaluated result: a number result SHALL follow the number rules above.
+A driver SHALL convert each filter literal to its field's type and reject mismatches with an error at the literal's position: text, uuid, enum, date, timestamp need a string; integer, float, numeric need a number; boolean needs `TRUE` or `FALSE`. Integers SHALL fit 64 bits, floats SHALL be finite, numerics SHALL keep exact digits, dates SHALL be `YYYY-MM-DD`, timestamps SHALL be RFC 3339 with an offset, uuids SHALL be canonical hyphenated hex, and enums SHALL be a declared value.
 
 #### Scenario: Enum value not declared
 - **WHEN** a filter is `status = 'archived'` and `status` declares only `active` and `blocked`
@@ -76,6 +76,9 @@ A driver SHALL convert each filter literal to its field's type and reject mismat
 #### Scenario: Invalid uuid
 - **WHEN** a filter is `id = 'not-a-uuid'` for uuid field `id`
 - **THEN** compilation fails at the literal's position
+
+### Requirement: Expression literal conversion
+For an expression literal the driver SHALL use the plan's evaluated result instead of evaluating the expression. A number result SHALL follow the number rules of literal conversion.
 
 #### Scenario: Evaluated number
 - **WHEN** a filter is `qty > {2 * 3}` for integer field `qty`

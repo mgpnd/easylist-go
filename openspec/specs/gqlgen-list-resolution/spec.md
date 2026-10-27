@@ -32,7 +32,7 @@ The resolver SHALL run the page query only when `items` is selected and the coun
 - **THEN** only the count query runs
 
 ### Requirement: Input mapping and errors
-`filter` SHALL be parsed with easylist-filter; an empty or absent filter means no filter. Sort entries, limit, and offset SHALL be passed to the planner. When `timezone` is set, the reference time SHALL be the runtime clock's current time in a fixed zone with that UTC offset in minutes; when it is absent, the runtime's default reference time applies. A `timezone` outside -720 to 840 SHALL be an error. Parse, timezone, and planning errors SHALL be returned as GraphQL errors on the list field, keeping their position information, without running any query.
+`filter` SHALL be parsed with easylist-filter; an empty or absent filter means no filter. Sort entries, limit, and offset SHALL be passed to the planner. Parse, timezone, and planning errors SHALL be returned as GraphQL errors on the list field, keeping their position information, without running any query.
 
 #### Scenario: Filter syntax error
 - **WHEN** `filter` is `name = `
@@ -41,6 +41,9 @@ The resolver SHALL run the page query only when `items` is selected and the coun
 #### Scenario: Limit above maximum
 - **WHEN** `limit` is 20000 for a list with maximum page size 10000
 - **THEN** the field resolves to an error stating the maximum
+
+### Requirement: Timezone mapping
+When `timezone` is set, the reference time SHALL be the runtime clock's current time in a fixed zone with that UTC offset in minutes; when it is absent, the runtime's default reference time applies. A `timezone` outside -720 to 840 SHALL be an error.
 
 #### Scenario: Client time zone
 - **WHEN** `filter` is `created_at = TODAY`, `timezone` is `-300`, and the runtime clock reads 2026-10-28T02:00:00Z
