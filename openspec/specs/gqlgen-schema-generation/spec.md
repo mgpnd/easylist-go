@@ -39,11 +39,15 @@ Field types SHALL map to GraphQL as: text `String`, integer `Int64`, float `Floa
 - **THEN** the GraphQL response contains the string `"10.50"`
 
 ### Requirement: List input
-For each list the plugin SHALL generate `<P>SortField` (one value per SQL field, in upper snake case), `input <P>Sort { field: <P>SortField!, direction: SortDirection! = ASC }`, and `input <P>ListInput { filter: String, sort: [<P>Sort!], limit: Int, offset: Int }`.
+For each list the plugin SHALL generate `<P>SortField` (one value per SQL field that is not an array, in upper snake case), `input <P>Sort { field: <P>SortField!, direction: SortDirection! = ASC }`, and `input <P>ListInput { filter: String, sort: [<P>Sort!], limit: Int, offset: Int }`.
 
 #### Scenario: Calculated fields are not sortable
 - **WHEN** `users` has calculated field `display`
 - **THEN** `UsersSortField` has no `DISPLAY` value
+
+#### Scenario: Array fields are not sortable
+- **WHEN** `users` has array field `tags`
+- **THEN** `UsersSortField` has no `TAGS` value
 
 ### Requirement: Export input and job types
 For each list the plugin SHALL generate `<P>ExportField` (one value per SQL and calculated field) and `input <P>ExportInput { fields: [<P>ExportField!]!, filter: String, sort: [<P>Sort!], format: ExportFormat! }`. It SHALL generate once `enum ExportFormat { CSV XLSX }` and `type ExportJob { id: ID! }`.
@@ -79,3 +83,22 @@ The generated Go code MAY import the application's list definitions, and the lis
 #### Scenario: Definitions compile before generation
 - **WHEN** the list definitions package is compiled with no generated code present
 - **THEN** it compiles, so the gqlgen entrypoint can import it
+
+### Requirement: Array field types
+An array field SHALL map to a GraphQL list of its element type with non-null elements: `[T!]!` when the field is not nullable and `[T!]` when it is. The element type SHALL follow the scalar type mapping, and an enum array SHALL use the field's generated enum. A NULL array SHALL resolve to `null` and an empty array to `[]`.
+
+#### Scenario: Non-null text array
+- **WHEN** `users` has non-nullable text array field `tags`
+- **THEN** `UsersRow` has `tags: [String!]!`
+
+#### Scenario: Nullable enum array
+- **WHEN** `users` has nullable enum array field `statuses` with values `ok` and `failed`
+- **THEN** the schema has `enum UsersStatuses { OK FAILED }` and `UsersRow` has `statuses: [UsersStatuses!]`
+
+#### Scenario: Custom scalar array
+- **WHEN** `users` has uuid array field `group_ids`
+- **THEN** `UsersRow` has `group_ids: [UUID!]!` and the `UUID` scalar is declared
+
+#### Scenario: NULL and empty arrays
+- **WHEN** nullable `tags` is NULL on one row and an empty array on another
+- **THEN** the response has `"tags": null` for the first row and `"tags": []` for the second
