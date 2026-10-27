@@ -1,6 +1,7 @@
 package easylistgql
 
 import (
+	"context"
 	"flag"
 	"os"
 	"path/filepath"
@@ -117,5 +118,63 @@ func TestPluginChecksOptions(t *testing.T) {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// arrayUsers declares the array fields of the gqlgen-schema-generation
+// scenarios.
+var arrayUsers = easylist.List{
+	Name: "users", Table: "users", Alias: "u", PrimaryKey: "id",
+	Fields: []easylist.Field{
+		{Name: "id", Type: easylist.Integer},
+		{Name: "tags", Type: easylist.Text, Array: true},
+		{Name: "statuses", Type: easylist.Enum, Array: true, Nullable: true, Values: []string{"ok", "failed"}},
+		{Name: "group_ids", Type: easylist.UUID, Array: true},
+		easylist.Calc("labels", easylist.Text, func(context.Context, easylist.Row) ([]string, error) { return nil, nil }),
+	},
+}
+
+func TestArraySDL(t *testing.T) {
+	reg, err := easylist.NewRegistry(arrayUsers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	users, _ := reg.List("users")
+	s := Scalars{}.withDefaults()
+	sdl := listSDL(users, s)
+	golden(t, "array_users.graphqls", sdl)
+	shared := sharedSDL(reg.Lists(), s)
+	golden(t, "array_shared.graphqls", shared)
+	for _, want := range []string{
+		"  tags: [String!]!\n",
+		"enum UsersStatuses {\n  OK\n  FAILED\n}", "  statuses: [UsersStatuses!]\n",
+		"  group_ids: [UUID!]!\n", "  labels: [String!]!\n",
+	} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("SDL lacks %q", want)
+		}
+	}
+	if !strings.Contains(shared, "scalar UUID\n") {
+		t.Errorf("shared SDL does not declare UUID:\n%s", shared)
+	}
+	sortEnum := sdl[strings.Index(sdl, "enum UsersSortField"):]
+	sortEnum = sortEnum[:strings.Index(sortEnum, "}")]
+	if sortEnum != "enum UsersSortField {\n  ID\n" {
+		t.Errorf("sort enum = %q, want only ID", sortEnum)
+	}
+	exportEnum := sdl[strings.Index(sdl, "enum UsersExportField"):]
+	exportEnum = exportEnum[:strings.Index(exportEnum, "}")]
+	for _, v := range []string{"TAGS", "STATUSES", "GROUP_IDS", "LABELS"} {
+		if !strings.Contains(exportEnum, "  "+v+"\n") {
+			t.Errorf("export enum lacks %s", v)
+		}
+	}
+
+	fixture, _ := lists.Registry.List("users")
+	fixtureSDL := listSDL(fixture, s)
+	fixtureSort := fixtureSDL[strings.Index(fixtureSDL, "enum UsersSortField"):]
+	fixtureSort = fixtureSort[:strings.Index(fixtureSort, "}")]
+	if strings.Contains(fixtureSort, "TAGS") || strings.Contains(fixtureSort, "ROLES") || !strings.Contains(fixtureSort, "COUNTRY") {
+		t.Errorf("fixture sort enum = %s", fixtureSort)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,6 +26,7 @@ var Users = easylist.List{
 		{Name: "id", Type: easylist.Integer},
 		{Name: "name", Type: easylist.Text, Title: "Full name"},
 		{Name: "status", Type: easylist.Enum, Values: []string{"active", "blocked"}},
+		{Name: "tags", Type: easylist.Text, Array: true, Nullable: true},
 		{Name: "country", Type: easylist.Text, Nullable: true, SQL: "c.name", Joins: []string{"country"}},
 		{Name: "last_order", Type: easylist.Timestamp, Nullable: true, SQL: "lo.created_at", Joins: []string{"last_order"}},
 		easylist.Calc("display", easylist.Text, func(ctx context.Context, r easylist.Row) (string, error) {
@@ -42,6 +44,11 @@ var Users = easylist.List{
 		) lo ON TRUE`},
 	},
 }
+
+var Labels = easylist.Calc("labels", easylist.Text, func(ctx context.Context, r easylist.Row) ([]string, error) {
+	tags, _ := r.Strings("tags")
+	return append([]string{"user"}, tags...), nil
+}, "tags")
 
 func newRegistry() (*easylist.Registry, error) {
 	return easylist.NewRegistry(Users)
@@ -91,6 +98,11 @@ func TestReadmeSnippets(t *testing.T) {
 		}
 	}
 	if _, err := newRegistry(); err != nil {
+		t.Fatal(err)
+	}
+	withLabels := Users
+	withLabels.Fields = append(slices.Clone(Users.Fields), Labels)
+	if _, err := easylist.NewRegistry(withLabels); err != nil {
 		t.Fatal(err)
 	}
 }

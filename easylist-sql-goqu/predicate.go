@@ -53,6 +53,13 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 		return unsupported()
 	}
 
+	if field.Array {
+		if operator != filter.OpContains && operator != filter.OpExcludes {
+			return unsupported()
+		}
+		return arrayPredicate(field, column, operator, value)
+	}
+
 	if operator == filter.OpContains || operator == filter.OpExcludes {
 		if field.Type != easylist.Text {
 			return unsupported()
@@ -120,6 +127,63 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 		return goqu.L("? <= ?", column, arg), nil
 	}
 	return unsupported()
+}
+
+// arrayPredicate compiles CONTAINS or EXCLUDES on an array field. Each value
+// is bound once and compared with "= ANY", so PostgreSQL infers its type from
+// the column's element type, as it does for scalar comparisons. CONTAINS
+// requires every value; EXCLUDES rejects any, and COALESCE makes NULL arrays
+// and NULL comparison results match.
+func arrayPredicate(field easylist.PlanField, column exp.LiteralExpression, operator filter.PredicateOp, value filter.Literal) (exp.Expression, error) {
+	values, err := arrayValues(field, value)
+	if err != nil {
+		return nil, err
+	}
+	tests := make([]string, len(values))
+	args := make([]any, 0, 2*len(values))
+	for i, v := range values {
+		tests[i] = "? = ANY(?)"
+		args = append(args, v, column)
+	}
+	if operator == filter.OpExcludes {
+		return goqu.L("COALESCE(NOT ("+strings.Join(tests, " OR ")+"), TRUE)", args...), nil
+	}
+	return goqu.L("("+strings.Join(tests, " AND ")+")", args...), nil
+}
+
+// arrayValues converts an array predicate's literal into its list of element
+// values. A string literal is always a comma-separated list whose trimmed
+// items take the literal kind of the element type; an unquoted number or
+// boolean is one value.
+func arrayValues(field easylist.PlanField, value filter.Literal) ([]any, error) {
+	if value.Kind() != filter.LiteralString {
+		arg, err := predicateArgument(field, value.Kind(), value.Text(), value.Pos())
+		if err != nil {
+			return nil, err
+		}
+		return []any{arg}, nil
+	}
+	itemKind := filter.LiteralString
+	switch field.Type {
+	case easylist.Integer, easylist.Float, easylist.Numeric:
+		itemKind = filter.LiteralNumber
+	case easylist.Boolean:
+		itemKind = filter.LiteralBool
+	}
+	items := strings.Split(value.Text(), ",")
+	values := make([]any, len(items))
+	for i, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			return nil, fmt.Errorf("empty item in the value list for field %q at position %d", field.Name, value.Pos())
+		}
+		arg, err := predicateArgument(field, itemKind, item, value.Pos())
+		if err != nil {
+			return nil, err
+		}
+		values[i] = arg
+	}
+	return values, nil
 }
 
 // predicateArgument converts a single scalar value. Numeric expressions keep

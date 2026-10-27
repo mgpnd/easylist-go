@@ -17,6 +17,7 @@ var Users = easylist.List{
 		{Name: "id", Type: easylist.Integer},
 		{Name: "name", Type: easylist.Text, Title: "Full name"},
 		{Name: "status", Type: easylist.Enum, Values: []string{"active", "blocked"}},
+		{Name: "tags", Type: easylist.Text, Array: true, Nullable: true},
 		{Name: "country", Type: easylist.Text, Nullable: true, SQL: "c.name", Joins: []string{"country"}},
 		{Name: "last_order", Type: easylist.Timestamp, Nullable: true, SQL: "lo.created_at", Joins: []string{"last_order"}},
 		easylist.Calc("display", easylist.Text, func(ctx context.Context, r easylist.Row) (string, error) {
@@ -41,9 +42,10 @@ var Users = easylist.List{
 - **PrimaryKey** names a non-nullable SQL field. It is always selected and is the default sort and final tiebreaker, so pages are stable.
 - **Fields** with `SQL` and `Joins` read joined data. A join is added to a query only when a selected, filtered, or sorted field needs it. `Join.DependsOn` lists joins that must come first; they are added transitively and ordered deterministically.
 - **Calculated fields** (`Calc`, `CalcNullable`) run once per row in Go, only when requested. They read the SQL fields they name as requirements through `Row` accessors such as `String`, `Int64`, and `Time`, which report whether the value is present. They cannot be filtered or sorted on. The function's return type must match the declared field type.
+- **Array** makes a field an array of its type; see [Arrays](#arrays).
 - **Title** is the export header and defaults to the field name; `WithTitle` sets it on calculated fields.
 
-`NewRegistry` validates every list and fails at startup on invalid names, duplicate names, unknown or cyclic joins, unknown calculated requirements, a missing or nullable primary key, invalid enum values, and inconsistent page sizes:
+`NewRegistry` validates every list and fails at startup on invalid names, duplicate names, unknown or cyclic joins, unknown calculated requirements, a missing, nullable, or array primary key, invalid enum values, and inconsistent page sizes:
 
 ```go
 func newRegistry() (*easylist.Registry, error) {
@@ -84,6 +86,33 @@ Each join must return at most one row per base row. Use a `LEFT JOIN` on a uniqu
 Every type also accepts `= NULL` and `!= NULL`, whether or not the field is declared `Nullable`.
 
 A NULL is an absent value. A NULL in a field not declared `Nullable` fails the request with an error naming the field, which usually points at a join or definition mistake. Filters compare with NULL through the `NULL` keyword: `country = NULL` matches rows where `country` is NULL, and `country != NULL` matches rows where it is not. `!=` matches exactly the rows `=` does not, so `country != 'FR'` also matches rows where `country` is NULL; add `AND country != NULL` to leave them out. `EXCLUDES` matches rows that do not contain its value case-insensitively, and rows where the field is NULL. The other operators never match NULL.
+
+## Arrays
+
+Setting `Array: true` makes a field of any type an array of that type. Its value is a Go slice of the element's representation from the table above: `[]string` for text, numeric, uuid, and enum, `[]int64`, `[]float64`, `[]bool`, and `[]time.Time` for dates and timestamps. `Row` reads them with `Strings`, `Int64s`, `Float64s`, `Bools`, and `Times`, which return the slice stored in the row without copying it; do not modify it. An array enum field declares its `Values` like a scalar one, and every element must be one of them.
+
+`Nullable` applies to the array as a whole. A NULL array is an absent value, while an empty array is a present, empty slice. Elements are never NULL: a NULL element, like an element that does not match the field type or an undeclared enum value, fails the request with an error naming the field.
+
+A calculated field is an array when its function returns a slice of the type's representation; no flag is needed:
+
+```go
+var Labels = easylist.Calc("labels", easylist.Text, func(ctx context.Context, r easylist.Row) ([]string, error) {
+	tags, _ := r.Strings("tags")
+	return append([]string{"user"}, tags...), nil
+}, "tags")
+```
+
+A calculated array may return a nil slice, which is an empty array. `CalcNullable` takes a function returning a pointer to a slice, and a nil pointer is NULL.
+
+Array fields cannot be the primary key or be sorted on. They accept only these filter operators:
+
+- `tags CONTAINS 'go'` matches rows whose array has an element equal to `go`. Matching is exact and case-sensitive.
+- `tags EXCLUDES 'go'` matches rows whose array has no element equal to `go`, including empty arrays and rows where `tags` is NULL.
+- `tags = NULL` and `tags != NULL` test whether the array is NULL. An empty array is not NULL.
+
+On an array field a quoted string is always a comma-separated list. Items are trimmed, an empty item is an error, and each item is converted to the element type, so `ids CONTAINS '7, 8'` lists the integers 7 and 8. A list after `CONTAINS` matches rows whose array holds every listed value; a list after `EXCLUDES` leaves out rows whose array holds any of them. A single unquoted number or boolean, as in `ids CONTAINS 7`, is one value. There is no way to match an element that contains a comma. Scalar text fields keep their substring `CONTAINS` and `EXCLUDES`, with no list splitting.
+
+Drivers learn which fields are arrays from `PlanField.Array`. They select each array as JSON array text, or SQL NULL for a NULL array, and the runtime decodes it with `encoding/json`. Elements are JSON strings for text, enum, uuid, dates (`YYYY-MM-DD`), and timestamps (ISO 8601, read as UTC when there is no offset); numbers for integer, float, and numeric; and booleans for boolean. Float elements may also be the strings `NaN`, `Infinity`, and `-Infinity`, and numeric elements the string `NaN`.
 
 ## Run requests
 

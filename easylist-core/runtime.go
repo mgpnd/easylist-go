@@ -121,7 +121,7 @@ func (rt *Runtime) Stream(ctx context.Context, l *CompiledList, p *Plan, fn func
 	defer rows.Close()
 	holders := make([]any, len(p.Fields))
 	for i, f := range p.Fields {
-		holders[i] = newHolder(f.Type)
+		holders[i] = newHolder(f)
 	}
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
@@ -138,6 +138,11 @@ func (rt *Runtime) Stream(ctx context.Context, l *CompiledList, p *Plan, fn func
 					return fmt.Errorf("list %q: non-nullable field %q is NULL", l.def.Name, f.Name)
 				}
 				continue
+			}
+			if f.Array {
+				if v, err = decodeArray(f.Type, v.(string)); err != nil {
+					return fmt.Errorf("list %q: field %q: %w", l.def.Name, f.Name, err)
+				}
 			}
 			if err := checkEnumValue(l.fields[f.Name], v); err != nil {
 				return fmt.Errorf("list %q: field %q: %w", l.def.Name, f.Name, err)
@@ -177,8 +182,12 @@ func (c *CompiledList) wrap(err error) error {
 	return fmt.Errorf("list %q: %w", c.def.Name, err)
 }
 
-func newHolder(t Type) any {
-	switch t {
+// newHolder returns the scan destination for f. Arrays arrive as JSON text.
+func newHolder(f PlanField) any {
+	if f.Array {
+		return new(sql.NullString)
+	}
+	switch f.Type {
 	case Integer:
 		return new(sql.NullInt64)
 	case Float:

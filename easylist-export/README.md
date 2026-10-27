@@ -54,7 +54,9 @@ Both formats have one column per requested field, in request order, and a header
 
 **CSV** is UTF-8 with comma separators and RFC 4180 quoting. Dates are `YYYY-MM-DD`, timestamps RFC 3339 in UTC, booleans `true`/`false`, numerics their exact decimal text, and enums their declared value.
 
-**XLSX** has one worksheet named after the list (truncated to 31 characters). Strings are text cells and never formulas. Integers within ±2^53 and floats are number cells; numerics and larger integers are text cells, so no digits are lost. Dates and timestamps (in UTC) are date cells, and booleans are boolean cells. The workbook is built with excelize's `StreamWriter`, which keeps rows in temporary files rather than memory, and the zip is written to the writer when the export completes.
+An array is one text cell in both formats. Its elements are formatted as CSV values and joined by commas with no spaces. Text, enum, uuid, date, and timestamp elements are wrapped in double quotes, with embedded double quotes doubled: the elements `go` and `rust` give `"go","rust"`, the elements `say "hi"` and `a,b` give `"say ""hi""","a,b"`, and the integers 7 and 8 give `7,8`. An empty array is an empty cell, the same as a NULL array. In CSV the cell is then quoted like any other field, so the raw field for `"go","rust"` is `"""go"",""rust"""`.
+
+**XLSX** has one worksheet named after the list (truncated to 31 characters). Strings are text cells and never formulas. Integers within ±2^53 and floats are number cells; numerics and larger integers are text cells, so no digits are lost. Dates and timestamps (in UTC) are date cells, and booleans are boolean cells. Arrays are text cells holding the array text described above, even when every element is a number. The workbook is built with excelize's `StreamWriter`, which keeps rows in temporary files rather than memory, and the zip is written to the writer when the export completes.
 
 ### CSV formula risk
 

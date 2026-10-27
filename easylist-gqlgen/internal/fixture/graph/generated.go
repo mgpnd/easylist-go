@@ -84,9 +84,12 @@ type ComplexityRoot struct {
 		Display   func(childComplexity int) int
 		ID        func(childComplexity int) int
 		Initials  func(childComplexity int) int
+		Labels    func(childComplexity int) int
 		Name      func(childComplexity int) int
+		Roles     func(childComplexity int) int
 		Score     func(childComplexity int) int
 		Status    func(childComplexity int) int
+		Tags      func(childComplexity int) int
 		Tier      func(childComplexity int) int
 		UID       func(childComplexity int) int
 	}
@@ -278,12 +281,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.UsersRow.Initials(childComplexity), true
+	case "UsersRow.labels":
+		if e.ComplexityRoot.UsersRow.Labels == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UsersRow.Labels(childComplexity), true
 	case "UsersRow.name":
 		if e.ComplexityRoot.UsersRow.Name == nil {
 			break
 		}
 
 		return e.ComplexityRoot.UsersRow.Name(childComplexity), true
+	case "UsersRow.roles":
+		if e.ComplexityRoot.UsersRow.Roles == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UsersRow.Roles(childComplexity), true
 	case "UsersRow.score":
 		if e.ComplexityRoot.UsersRow.Score == nil {
 			break
@@ -296,6 +311,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.UsersRow.Status(childComplexity), true
+	case "UsersRow.tags":
+		if e.ComplexityRoot.UsersRow.Tags == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UsersRow.Tags(childComplexity), true
 	case "UsersRow.tier":
 		if e.ComplexityRoot.UsersRow.Tier == nil {
 			break
@@ -492,12 +513,18 @@ func (ec *executionContext) childFields_UsersRow(ctx context.Context, field grap
 		return ec.fieldContext_UsersRow_status(ctx, field)
 	case "country":
 		return ec.fieldContext_UsersRow_country(ctx, field)
+	case "tags":
+		return ec.fieldContext_UsersRow_tags(ctx, field)
+	case "roles":
+		return ec.fieldContext_UsersRow_roles(ctx, field)
 	case "display":
 		return ec.fieldContext_UsersRow_display(ctx, field)
 	case "initials":
 		return ec.fieldContext_UsersRow_initials(ctx, field)
 	case "tier":
 		return ec.fieldContext_UsersRow_tier(ctx, field)
+	case "labels":
+		return ec.fieldContext_UsersRow_labels(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type UsersRow", field.Name)
 }
@@ -1452,6 +1479,52 @@ func (ec *executionContext) fieldContext_UsersRow_country(_ context.Context, fie
 	return graphql.NewScalarFieldContext("UsersRow", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
+func (ec *executionContext) _UsersRow_tags(ctx context.Context, field graphql.CollectedField, obj *easylistgen.UsersRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UsersRow_tags(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Tags, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalOString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UsersRow_tags(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UsersRow", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _UsersRow_roles(ctx context.Context, field graphql.CollectedField, obj *easylistgen.UsersRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UsersRow_roles(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Roles, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []easylistgen.UsersRoles) graphql.Marshaler {
+			return ec.marshalNUsersRoles2ᚕgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRolesᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UsersRow_roles(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UsersRow", field, false, false, errors.New("field of type UsersRoles does not have child fields"))
+}
+
 func (ec *executionContext) _UsersRow_display(ctx context.Context, field graphql.CollectedField, obj *easylistgen.UsersRow) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1519,6 +1592,29 @@ func (ec *executionContext) _UsersRow_tier(ctx context.Context, field graphql.Co
 }
 func (ec *executionContext) fieldContext_UsersRow_tier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("UsersRow", field, true, false, errors.New("field of type UsersTier does not have child fields"))
+}
+
+func (ec *executionContext) _UsersRow_labels(ctx context.Context, field graphql.CollectedField, obj *easylistgen.UsersRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UsersRow_labels(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Labels(ctx)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UsersRow_labels(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UsersRow", field, true, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) ___Directive_name(ctx context.Context, field graphql.CollectedField, obj *introspection.Directive) (ret graphql.Marshaler) {
@@ -3320,6 +3416,16 @@ func (ec *executionContext) _UsersRow(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.RequiredNull {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "tags":
+			out.Values[i] = ec._UsersRow_tags(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "roles":
+			out.Values[i] = ec._UsersRow_roles(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "display":
 			field := field
 
@@ -3406,6 +3512,44 @@ func (ec *executionContext) _UsersRow(ctx context.Context, sel ast.SelectionSet,
 					}
 				}()
 				res = ec._UsersRow_tier(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.IsDeferred() {
+				deferredFieldSet.AddField(field)
+				fieldIndex := len(deferredFieldSet.Values) - 1
+				deferredFieldSet.Concurrently(fieldIndex, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, deferredFieldSet)
+				})
+
+				for _, deferrable := range field.Deferrables {
+					view, ok := deferLabelToView[deferrable.Label]
+					if !ok {
+						view = deferredFieldSet.NewView()
+						deferLabelToView[deferrable.Label] = view
+					}
+					view.AddIndices(fieldIndex)
+				}
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "labels":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UsersRow_labels(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -4091,6 +4235,35 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 	return res
 }
 
+func (ec *executionContext) unmarshalNString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNString2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) unmarshalNTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {
 	res, err := graphql.UnmarshalTime(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -4185,6 +4358,46 @@ func (ec *executionContext) marshalNUsersPage2ᚖgithubᚗcomᚋmgpndᚋeasylist
 		return graphql.Null
 	}
 	return ec._UsersPage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUsersRoles2githubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRoles(ctx context.Context, v any) (easylistgen.UsersRoles, error) {
+	var res easylistgen.UsersRoles
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUsersRoles2githubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRoles(ctx context.Context, sel ast.SelectionSet, v easylistgen.UsersRoles) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNUsersRoles2ᚕgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRolesᚄ(ctx context.Context, v any) ([]easylistgen.UsersRoles, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]easylistgen.UsersRoles, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNUsersRoles2githubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRoles(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNUsersRoles2ᚕgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRolesᚄ(ctx context.Context, sel ast.SelectionSet, v []easylistgen.UsersRoles) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNUsersRoles2githubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRoles(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNUsersRow2ᚕᚖgithubᚗcomᚋmgpndᚋeasylistᚑgoᚋeasylistᚑgqlgenᚋinternalᚋfixtureᚋgraphᚋeasylistgenᚐUsersRowᚄ(ctx context.Context, sel ast.SelectionSet, v []*easylistgen.UsersRow) graphql.Marshaler {
@@ -4504,6 +4717,41 @@ func (ec *executionContext) unmarshalOOrderItemsSort2ᚕᚖgithubᚗcomᚋmgpnd�
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) unmarshalOString2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNString2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOString2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNString2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {

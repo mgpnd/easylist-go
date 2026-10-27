@@ -21,7 +21,8 @@ const (
 type goField struct {
 	f       easylist.Field
 	goName  string // gqlgen's Go name for the GraphQL field
-	goType  string // non-pointer Go type
+	elem    string // Go type of the value, or of each element of an array
+	goType  string // non-pointer Go type: elem, or a slice of it
 	accessr string // easylist.Row accessor
 }
 
@@ -39,17 +40,22 @@ func goFields(l *easylist.CompiledList) ([]goField, error) {
 		g := goField{f: f, goName: templates.ToGo(f.Name)}
 		switch f.Type {
 		case easylist.Integer:
-			g.goType, g.accessr = "int64", "Int64"
+			g.elem, g.accessr = "int64", "Int64"
 		case easylist.Float:
-			g.goType, g.accessr = "float64", "Float64"
+			g.elem, g.accessr = "float64", "Float64"
 		case easylist.Boolean:
-			g.goType, g.accessr = "bool", "Bool"
+			g.elem, g.accessr = "bool", "Bool"
 		case easylist.Date, easylist.Timestamp:
-			g.goType, g.accessr = "time.Time", "Time"
+			g.elem, g.accessr = "time.Time", "Time"
 		case easylist.Enum:
-			g.goType, g.accessr = l.TypePrefix()+easylist.PascalCase(f.Name), "String"
+			g.elem, g.accessr = l.TypePrefix()+easylist.PascalCase(f.Name), "String"
 		default:
-			g.goType, g.accessr = "string", "String"
+			g.elem, g.accessr = "string", "String"
+		}
+		g.goType = g.elem
+		if f.Array {
+			// The plural accessors (Strings, Int64s, ...) return slices.
+			g.goType, g.accessr = "[]"+g.elem, g.accessr+"s"
 		}
 		out = append(out, g)
 	}
@@ -67,7 +73,7 @@ func generateGo(pkgName, registryPkg, registryName string, lists []*easylist.Com
 			return nil, err
 		}
 		for _, g := range fields {
-			usesTime = usesTime || g.goType == "time.Time"
+			usesTime = usesTime || g.elem == "time.Time"
 			usesContext = usesContext || g.f.Calculated()
 		}
 		writeList(&body, l, fields)
@@ -106,8 +112,9 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 		if g.f.Calculated() {
 			continue
 		}
+		// A nil slice is a NULL array, so arrays need no pointer.
 		ptr := ""
-		if g.f.Nullable {
+		if g.f.Nullable && !g.f.Array {
 			ptr = "*"
 		}
 		fmt.Fprintf(b, "\t%s %s%s\n", g.goName, ptr, g.goType)
@@ -124,7 +131,13 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 		if g.f.Type == easylist.Enum {
 			val = g.goType + "(v)"
 		}
-		if g.f.Nullable {
+		if g.f.Array {
+			if g.f.Type == easylist.Enum {
+				writeEnumSlice(b, "\t\t", "out."+g.goName, "v", g.elem)
+			} else {
+				fmt.Fprintf(b, "\t\tout.%s = v\n", g.goName)
+			}
+		} else if g.f.Nullable {
 			fmt.Fprintf(b, "\t\tx := %s\n\t\tout.%s = &x\n", val, g.goName)
 		} else {
 			fmt.Fprintf(b, "\t\tout.%s = %s\n", g.goName, val)
@@ -142,7 +155,18 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 			val = g.goType + "(v.(string))"
 		}
 		fmt.Fprintf(b, "// %s evaluates calculated field %q for this row.\n", g.goName, g.f.Name)
-		if g.f.Nullable {
+		if g.f.Array {
+			// A nil slice is NULL, so nullable and non-nullable arrays share a signature.
+			fmt.Fprintf(b, "func (r *%sRow) %s(ctx context.Context) (%s, error) {\n", p, g.goName, g.goType)
+			fmt.Fprintf(b, "\tv, err := r.row.Calc(ctx, %q)\n\tif err != nil || v == nil {\n\t\treturn nil, err\n\t}\n", g.f.Name)
+			if g.f.Type == easylist.Enum {
+				b.WriteString("\tin := v.([]string)\n\tvar out " + g.goType + "\n")
+				writeEnumSlice(b, "\t", "out", "in", g.elem)
+				b.WriteString("\treturn out, nil\n}\n\n")
+			} else {
+				fmt.Fprintf(b, "\treturn %s, nil\n}\n\n", val)
+			}
+		} else if g.f.Nullable {
 			fmt.Fprintf(b, "func (r *%sRow) %s(ctx context.Context) (*%s, error) {\n", p, g.goName, g.goType)
 			fmt.Fprintf(b, "\tv, err := r.row.Calc(ctx, %q)\n\tif err != nil || v == nil {\n\t\treturn nil, err\n\t}\n", g.f.Name)
 			fmt.Fprintf(b, "\tx := %s\n\treturn &x, nil\n}\n\n", val)
@@ -163,13 +187,13 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 			for _, v := range g.f.Values {
 				pairs = append(pairs, v, easylist.EnumName(v))
 			}
-			writeEnum(b, g.goType, fmt.Sprintf("holds a declared value of field %q", g.f.Name), pairs)
+			writeEnum(b, g.elem, fmt.Sprintf("holds a declared value of field %q", g.f.Name), pairs)
 		}
 	}
 	var sortPairs, exportPairs []string
 	for _, g := range fields {
 		pair := []string{g.f.Name, easylist.EnumName(g.f.Name)}
-		if !g.f.Calculated() {
+		if sortable(g.f) {
 			sortPairs = append(sortPairs, pair...)
 		}
 		exportPairs = append(exportPairs, pair...)
@@ -199,6 +223,13 @@ func writeList(b *bytes.Buffer, l *easylist.CompiledList, fields []goField) {
 	b.WriteString("\tfields := make([]string, len(input.Fields))\n\tfor i, f := range input.Fields {\n\t\tfields[i] = string(f)\n\t}\n")
 	fmt.Fprintf(b, "\treturn easylistgql.Export(ctx, rt, registry(), %s, easylistgql.ExportInput{\n", name)
 	fmt.Fprintf(b, "\t\tFields: fields, Filter: input.Filter, Sort: %sSorts(input.Sort), Format: input.Format,\n\t})\n}\n\n", lower)
+}
+
+// writeEnumSlice writes code that converts the []string src into a slice of
+// the enum type elem and assigns it to dst.
+func writeEnumSlice(b *bytes.Buffer, indent, dst, src, elem string) {
+	fmt.Fprintf(b, "%s%s = make([]%s, len(%s))\n", indent, dst, elem, src)
+	fmt.Fprintf(b, "%sfor i, s := range %s {\n%s\t%s[i] = %s(s)\n%s}\n", indent, src, indent, dst, elem, indent)
 }
 
 func writeEnum(b *bytes.Buffer, typeName, doc string, pairs []string) {

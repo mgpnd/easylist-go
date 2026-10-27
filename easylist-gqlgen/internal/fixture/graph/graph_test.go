@@ -219,6 +219,41 @@ func TestValuesAndCalculatedFields(t *testing.T) {
 	}
 }
 
+func TestArrayValues(t *testing.T) {
+	rt, db := newRuntime()
+	db.rows = []map[string]any{
+		{"id": int64(1), "tags": `["go","rust"]`, "roles": `["admin","editor"]`},
+		{"id": int64(2), "tags": nil, "roles": `[]`},
+		{"id": int64(3), "tags": `[]`, "roles": `["editor"]`},
+	}
+	resp := run(t, rt, `{ people(query: {}) { items { id tags roles labels } } }`)
+	if len(resp.Errors) > 0 {
+		t.Fatalf("errors: %+v", resp.Errors)
+	}
+	want := `{"people":{"items":[` +
+		`{"id":1,"tags":["go","rust"],"roles":["ADMIN","EDITOR"],"labels":["role:admin","role:editor","tag:go","tag:rust"]},` +
+		`{"id":2,"tags":null,"roles":[],"labels":[]},` +
+		`{"id":3,"tags":[],"roles":["EDITOR"],"labels":["role:editor"]}` +
+		`]}}`
+	if string(resp.Data) != want {
+		t.Errorf("data =\n%s\nwant\n%s", resp.Data, want)
+	}
+	if want := []string{"PAGE id,tags,roles||id ASC|100,0|false"}; !slices.Equal(db.queries, want) {
+		t.Errorf("queries = %q, want %q", db.queries, want)
+	}
+
+	db.rows = []map[string]any{{"id": int64(1), "roles": `["admin","owner"]`}}
+	resp = run(t, rt, `{ people(query: {}) { items { roles } } }`)
+	if string(resp.Data) != "null" || len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0].Message, `"owner"`) {
+		t.Errorf("undeclared enum element: data = %s, errors = %+v", resp.Data, resp.Errors)
+	}
+
+	resp = run(t, rt, `{ people(query: {sort: [{field: TAGS}]}) { items { id } } }`)
+	if len(resp.Errors) != 1 || !strings.Contains(resp.Errors[0].Message, "TAGS") {
+		t.Errorf("sort on an array field: errors = %+v", resp.Errors)
+	}
+}
+
 func TestCalculatedFieldError(t *testing.T) {
 	rt, db := newRuntime()
 	db.rows = sampleRows()

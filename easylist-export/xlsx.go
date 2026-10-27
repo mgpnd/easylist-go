@@ -94,7 +94,15 @@ func (e *xlsxEncoder) write() error {
 
 // cell maps a value to an excelize cell. Strings become inline text cells,
 // never formulas. Values a spreadsheet number cannot hold exactly stay text.
+// Arrays are text cells holding their CSV text; an empty array is an empty cell.
 func (e *xlsxEncoder) cell(f easylist.Field, v any) (any, error) {
+	if f.Array && v != nil {
+		s, err := arrayText(f, v)
+		if err != nil || s == "" {
+			return nil, err
+		}
+		return s, nil
+	}
 	switch v := v.(type) {
 	case nil:
 		return nil, nil

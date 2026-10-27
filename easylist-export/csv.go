@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
@@ -56,6 +57,9 @@ func csvValue(f easylist.Field, v any) (string, error) {
 	if v == nil {
 		return "", nil
 	}
+	if f.Array {
+		return arrayText(f, v)
+	}
 	switch v := v.(type) {
 	case string:
 		return v, nil
@@ -72,6 +76,51 @@ func csvValue(f easylist.Field, v any) (string, error) {
 		return v.UTC().Format(time.RFC3339Nano), nil
 	}
 	return "", fmt.Errorf("field %q: unexpected value type %T", f.Name, v)
+}
+
+// arrayText formats an array as the text of one cell: each element as
+// csvValue formats a scalar, joined by commas without spaces. Text, enum,
+// uuid, date, and timestamp elements are wrapped in double quotes with
+// embedded quotes doubled. An empty array is empty text.
+func arrayText(f easylist.Field, v any) (string, error) {
+	elem := f
+	elem.Array = false
+	switch v := v.(type) {
+	case []string:
+		return joinElems(elem, v)
+	case []int64:
+		return joinElems(elem, v)
+	case []float64:
+		return joinElems(elem, v)
+	case []bool:
+		return joinElems(elem, v)
+	case []time.Time:
+		return joinElems(elem, v)
+	}
+	return "", fmt.Errorf("field %q: unexpected array value type %T", f.Name, v)
+}
+
+func joinElems[T any](elem easylist.Field, values []T) (string, error) {
+	quote := false
+	switch elem.Type {
+	case easylist.Text, easylist.Enum, easylist.UUID, easylist.Date, easylist.Timestamp:
+		quote = true
+	}
+	var b strings.Builder
+	for i, v := range values {
+		s, err := csvValue(elem, v)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		if quote {
+			s = `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+		}
+		b.WriteString(s)
+	}
+	return b.String(), nil
 }
 
 // formatFloat uses the shortest exact decimal, switching to exponent form
