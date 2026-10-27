@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vektah/gqlparser/v2"
+	"github.com/vektah/gqlparser/v2/ast"
+
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
 	"github.com/mgpnd/easylist-go/easylist-gqlgen/internal/fixture/lists"
 )
@@ -48,8 +51,9 @@ func TestSDLScenarios(t *testing.T) {
 		"  balance: Decimal!\n", "  id: Int64!\n", "  born: Date\n", "  created_at: Time!\n", "  uid: UUID!\n",
 		"type UsersPage {\n  items: [UsersRow!]!\n  totalCount: Int!\n}",
 		"input UsersSort {\n  field: UsersSortField!\n  direction: SortDirection! = ASC\n}",
-		"input UsersListInput {\n  filter: String\n  sort: [UsersSort!]\n  limit: Int\n  offset: Int\n}",
-		"input UsersExportInput {\n  fields: [UsersExportField!]!\n  filter: String\n  sort: [UsersSort!]\n  format: ExportFormat!\n}",
+		"input UsersListInput {\n  filter: String\n  sort: [UsersSort!]\n  limit: Int\n  offset: Int\n" + timezoneSDL + "}",
+		"input UsersExportInput {\n  fields: [UsersExportField!]!\n  filter: String\n  sort: [UsersSort!]\n  format: ExportFormat!\n" +
+			timezoneSDL + "  \"\"\"\n  The moment at which relative time values such as TODAY are evaluated. When\n  omitted, the server's current time is used.\n  \"\"\"\n  asOf: Time\n}",
 	} {
 		if !strings.Contains(sdl, want) {
 			t.Errorf("SDL lacks %q", want)
@@ -74,11 +78,45 @@ func TestSDLScenarios(t *testing.T) {
 	}
 }
 
+func TestTimezoneAndAsOfFields(t *testing.T) {
+	if !strings.Contains(timezoneSDL, "UTC offset in minutes, positive east of UTC") ||
+		!strings.Contains(timezoneSDL, "server's local time zone") || !strings.HasSuffix(timezoneSDL, "  timezone: Int\n") {
+		t.Errorf("timezone field = %q", timezoneSDL)
+	}
+	users, _ := lists.Registry.List("users")
+	sdl := listSDL(users, Scalars{}.withDefaults())
+	for _, input := range []string{"input UsersListInput {", "input UsersExportInput {"} {
+		body := sdl[strings.Index(sdl, input):]
+		body = body[:strings.Index(body, "\n}\n")+1]
+		if strings.Count(body, "  timezone: Int\n") != 1 {
+			t.Errorf("%s lacks an optional timezone: Int\n%s", input, body)
+		}
+	}
+	if strings.Count(sdl, "  asOf: Time\n") != 1 {
+		t.Errorf("asOf declared %d times, want once (on UsersExportInput)", strings.Count(sdl, "  asOf: Time\n"))
+	}
+	if _, err := gqlparser.LoadSchema(
+		&ast.Source{Name: "shared.graphqls", Input: sharedSDL(lists.Registry.Lists(), Scalars{}.withDefaults())},
+		&ast.Source{Name: "users.graphqls", Input: sdl},
+		&ast.Source{Name: "query.graphqls", Input: "type Query { x: Int }"},
+	); err != nil {
+		t.Errorf("SDL does not load: %v", err)
+	}
+}
+
 func TestRenamedScalar(t *testing.T) {
 	s := Scalars{UUID: "EasyUUID"}.withDefaults()
 	users, _ := lists.Registry.List("users")
 	if !strings.Contains(listSDL(users, s), "  uid: EasyUUID!\n") {
 		t.Error("uuid field does not use the renamed scalar")
+	}
+	items, _ := lists.Registry.List("order_items")
+	renamedTime := Scalars{Time: "EasyTime"}.withDefaults()
+	if !strings.Contains(listSDL(items, renamedTime), "  asOf: EasyTime\n") {
+		t.Error("asOf does not use the renamed timestamp scalar")
+	}
+	if shared := sharedSDL([]*easylist.CompiledList{items}, renamedTime); !strings.Contains(shared, "scalar EasyTime\n") || strings.Contains(shared, "scalar Time\n") {
+		t.Errorf("shared SDL with renamed Time = %s", shared)
 	}
 	shared := sharedSDL(lists.Registry.Lists(), s)
 	if !strings.Contains(shared, "scalar EasyUUID\n") || strings.Contains(shared, "scalar UUID\n") {
@@ -92,8 +130,16 @@ func TestSharedSDLDeclaresOnlyUsedScalars(t *testing.T) {
 		t.Fatal(err)
 	}
 	shared := sharedSDL(reg.Lists(), Scalars{}.withDefaults())
-	if !strings.Contains(shared, "scalar Int64") || strings.Contains(shared, "scalar UUID") || strings.Contains(shared, "scalar Time") {
+	if !strings.Contains(shared, "scalar Int64") || strings.Contains(shared, "scalar UUID") || strings.Contains(shared, "scalar Date") {
 		t.Errorf("shared SDL = %s", shared)
+	}
+	// order_items has no timestamp field, but its export input's asOf uses Time.
+	items, _ := reg.List("order_items")
+	if !strings.Contains(shared, "scalar Time\n") || !strings.Contains(listSDL(items, Scalars{}.withDefaults()), "  asOf: Time\n") {
+		t.Errorf("list without timestamp fields does not declare Time for asOf:\n%s", shared)
+	}
+	if sharedSDL(nil, Scalars{}.withDefaults()) != "enum SortDirection {\n  ASC\n  DESC\n}\n\nenum ExportFormat {\n  CSV\n  XLSX\n}\n\ntype ExportJob {\n  id: ID!\n}\n" {
+		t.Error("Time declared without any list")
 	}
 	if strings.Count(sharedSDL(lists.Registry.Lists(), Scalars{}.withDefaults()), "enum SortDirection") != 1 {
 		t.Error("SortDirection declared more than once")

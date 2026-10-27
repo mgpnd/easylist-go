@@ -30,6 +30,12 @@ input UsersListInput {
   sort: [UsersSort!]
   limit: Int
   offset: Int
+  """
+  The client's UTC offset in minutes, positive east of UTC (UTC+02:00 is 120),
+  between -720 and 840. Relative time values such as TODAY are evaluated in
+  this zone. When omitted, the server's local time zone is used.
+  """
+  timezone: Int
 }
 
 enum UsersExportField {
@@ -45,4 +51,15 @@ input UsersExportInput {
   filter: String
   sort: [UsersSort!]
   format: ExportFormat!
+  """
+  The client's UTC offset in minutes, positive east of UTC (UTC+02:00 is 120),
+  between -720 and 840. Relative time values such as TODAY are evaluated in
+  this zone. When omitted, the server's local time zone is used.
+  """
+  timezone: Int
+  """
+  The moment at which relative time values such as TODAY are evaluated. When
+  omitted, the server's current time is used.
+  """
+  asOf: Time
 }

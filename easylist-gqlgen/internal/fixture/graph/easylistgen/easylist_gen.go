@@ -195,17 +195,20 @@ type UsersSort struct {
 }
 
 type UsersListInput struct {
-	Filter *string
-	Sort   []*UsersSort
-	Limit  *int
-	Offset *int
+	Filter   *string
+	Sort     []*UsersSort
+	Limit    *int
+	Offset   *int
+	Timezone *int
 }
 
 type UsersExportInput struct {
-	Fields []UsersExportField
-	Filter *string
-	Sort   []*UsersSort
-	Format easylistgql.ExportFormat
+	Fields   []UsersExportField
+	Filter   *string
+	Sort     []*UsersSort
+	Format   easylistgql.ExportFormat
+	Timezone *int
+	AsOf     *time.Time
 }
 
 func usersSorts(in []*UsersSort) []easylist.Sort {
@@ -223,6 +226,7 @@ func usersSorts(in []*UsersSort) []easylist.Sort {
 func ResolveUsers(ctx context.Context, rt *easylist.Runtime, input UsersListInput) (*UsersPage, error) {
 	res, err := easylistgql.ResolveList(ctx, rt, registry(), "users", easylistgql.ListInput{
 		Filter: input.Filter, Sort: usersSorts(input.Sort), Limit: input.Limit, Offset: input.Offset,
+		Timezone: input.Timezone,
 	})
 	if err != nil {
 		return nil, err
@@ -242,6 +246,7 @@ func ExportUsers(ctx context.Context, rt *easylist.Runtime, input UsersExportInp
 	}
 	return easylistgql.Export(ctx, rt, registry(), "users", easylistgql.ExportInput{
 		Fields: fields, Filter: input.Filter, Sort: usersSorts(input.Sort), Format: input.Format,
+		Timezone: input.Timezone, AsOf: input.AsOf,
 	})
 }
 
@@ -304,17 +309,20 @@ type OrderItemsSort struct {
 }
 
 type OrderItemsListInput struct {
-	Filter *string
-	Sort   []*OrderItemsSort
-	Limit  *int
-	Offset *int
+	Filter   *string
+	Sort     []*OrderItemsSort
+	Limit    *int
+	Offset   *int
+	Timezone *int
 }
 
 type OrderItemsExportInput struct {
-	Fields []OrderItemsExportField
-	Filter *string
-	Sort   []*OrderItemsSort
-	Format easylistgql.ExportFormat
+	Fields   []OrderItemsExportField
+	Filter   *string
+	Sort     []*OrderItemsSort
+	Format   easylistgql.ExportFormat
+	Timezone *int
+	AsOf     *time.Time
 }
 
 func orderItemsSorts(in []*OrderItemsSort) []easylist.Sort {
@@ -332,6 +340,7 @@ func orderItemsSorts(in []*OrderItemsSort) []easylist.Sort {
 func ResolveOrderItems(ctx context.Context, rt *easylist.Runtime, input OrderItemsListInput) (*OrderItemsPage, error) {
 	res, err := easylistgql.ResolveList(ctx, rt, registry(), "order_items", easylistgql.ListInput{
 		Filter: input.Filter, Sort: orderItemsSorts(input.Sort), Limit: input.Limit, Offset: input.Offset,
+		Timezone: input.Timezone,
 	})
 	if err != nil {
 		return nil, err
@@ -351,5 +360,6 @@ func ExportOrderItems(ctx context.Context, rt *easylist.Runtime, input OrderItem
 	}
 	return easylistgql.Export(ctx, rt, registry(), "order_items", easylistgql.ExportInput{
 		Fields: fields, Filter: input.Filter, Sort: orderItemsSorts(input.Sort), Format: input.Format,
+		Timezone: input.Timezone, AsOf: input.AsOf,
 	})
 }

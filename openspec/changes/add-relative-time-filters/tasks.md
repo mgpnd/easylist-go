@@ -27,9 +27,9 @@
 
 ## 4. easylist-gqlgen
 
-- [ ] 4.1 Add `timezone: Int` with an SDL description to `<P>ListInput` and `<P>ExportInput` in `sdl.go`. Add `asOf: Time` (the plugin's timestamp scalar, always declared once an export input exists) to `<P>ExportInput`. Add `Timezone *int` to `ListInput` and `ExportInput` and `AsOf *time.Time` to `ExportInput`, and map them in the generated glue (`codegen.go`). Update the SDL golden tests, including a list without timestamp fields
-- [ ] 4.2 In `ResolveList`, validate `Timezone` with `easylist.UTCOffset` and set `req.Now = rt.Now().In(zone)`. In `Export`, set `AsOf` to `in.AsOf` or, when that is nil, `rt.Now()`, stored as `.UTC().Round(0)`, and set `Timezone`. Cover the `gqlgen-list-resolution` scenarios with an injected `Runtime.Clock`
-- [ ] 4.3 Run the generator for `internal/fixture`, commit the regenerated fixture files, add a fixture test that filters with `TODAY` and `timezone`, and update the README. Verify `go test ./...` passes
+- [x] 4.1 Add `timezone: Int` with an SDL description to `<P>ListInput` and `<P>ExportInput` in `sdl.go`. Add `asOf: Time` (the plugin's timestamp scalar, always declared once an export input exists) to `<P>ExportInput`. Add `Timezone *int` to `ListInput` and `ExportInput` and `AsOf *time.Time` to `ExportInput`, and map them in the generated glue (`codegen.go`). Update the SDL golden tests, including a list without timestamp fields
+- [x] 4.2 In `ResolveList`, validate `Timezone` with `easylist.UTCOffset` and set `req.Now = rt.Now().In(zone)`. In `Export`, set `AsOf` to `in.AsOf` or, when that is nil, `rt.Now()`, stored as `.UTC().Round(0)`, and set `Timezone`. Cover the `gqlgen-list-resolution` scenarios with an injected `Runtime.Clock`
+- [x] 4.3 Run the generator for `internal/fixture`, commit the regenerated fixture files, add a fixture test that filters with `TODAY` and `timezone`, and update the README. Verify `go test ./...` passes
 
 ## 5. easylist-export
 
