@@ -242,8 +242,8 @@ func compileList(l List) (*CompiledList, error) {
 			if f.SQL != "" || len(f.Joins) > 0 {
 				return nil, fail("calculated field %q cannot declare SQL or joins", f.Name)
 			}
-			if f.calc.goType != f.Type.goType() {
-				return nil, fail("calculated field %q of type %s must return %s, not %s", f.Name, f.Type, f.Type.goType(), f.calc.goType)
+			if f.calc.goType != f.goType() {
+				return nil, fail("calculated field %q of type %s must return %s, not %s", f.Name, f.Type, f.goType(), f.calc.goType)
 			}
 		} else {
 			sqlFields++
@@ -284,6 +284,9 @@ func compileList(l List) (*CompiledList, error) {
 	}
 	if pk.Nullable {
 		return nil, fail("primary key %q must not be nullable", l.PrimaryKey)
+	}
+	if pk.Array {
+		return nil, fail("primary key %q must not be an array field", l.PrimaryKey)
 	}
 
 	l.Fields = fields

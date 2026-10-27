@@ -25,6 +25,20 @@ var usersList = easylist.List{
 	},
 }
 
+// arraysList has a base-column array, an enum array, and an author-SQL array.
+var arraysList = easylist.List{
+	Name: "runs", Table: "runs", Alias: "u", PrimaryKey: "id",
+	Fields: []easylist.Field{
+		{Name: "id", Type: easylist.Integer},
+		{Name: "tags", Type: easylist.Text, Array: true, Nullable: true},
+		{Name: "statuses", Type: easylist.Enum, Array: true, Values: []string{"ok", "passed", "skipped", "failed"}},
+		{Name: "labels", Type: easylist.Text, Array: true, SQL: "l.names", Joins: []string{"labels"}},
+	},
+	Joins: []easylist.Join{
+		{Key: "labels", SQL: "LEFT JOIN LATERAL (SELECT array_agg(name ORDER BY name) AS names FROM labels WHERE run_id = u.id) l ON TRUE"},
+	},
+}
+
 func compile(t *testing.T, def easylist.List, kind easylist.Kind, req easylist.Request, filterText string) (string, []any) {
 	t.Helper()
 	sql, args, err := compileErr(t, def, kind, req, filterText)
@@ -143,6 +157,59 @@ func TestCompilePage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sql, args := compile(t, tc.def, easylist.KindPage, tc.req, tc.filter)
 			if sql != tc.sql || !reflect.DeepEqual(args, tc.args) {
+				t.Errorf("got\n%s\n%#v\nwant\n%s\n%#v", sql, args, tc.sql, tc.args)
+			}
+		})
+	}
+}
+
+func TestCompileArrays(t *testing.T) {
+	cases := []struct {
+		name   string
+		kind   easylist.Kind
+		req    easylist.Request
+		filter string
+		sql    string
+		args   []any
+	}{
+		{
+			name: "base column array",
+			kind: easylist.KindPage, req: easylist.Request{Fields: []string{"tags"}},
+			sql:  `SELECT u."id" AS "id", to_json(u."tags")::text AS "tags" FROM runs AS u ORDER BY u."id" ASC LIMIT $1 OFFSET $2`,
+			args: []any{int64(100), int64(0)},
+		},
+		{
+			name: "author SQL array",
+			kind: easylist.KindExport, req: easylist.Request{Fields: []string{"labels"}},
+			sql:  `SELECT u."id" AS "id", to_json(l.names)::text AS "labels" FROM runs AS u LEFT JOIN LATERAL (SELECT array_agg(name ORDER BY name) AS names FROM labels WHERE run_id = u.id) l ON TRUE ORDER BY u."id" ASC`,
+			args: []any{},
+		},
+		{
+			name: "CONTAINS list arguments",
+			kind: easylist.KindPage, req: easylist.Request{Fields: []string{"statuses"}, Limit: intp(10), Offset: intp(0)},
+			filter: "statuses CONTAINS 'ok,passed'",
+			sql:    `SELECT u."id" AS "id", to_json(u."statuses")::text AS "statuses" FROM runs AS u WHERE ($1 = ANY(u."statuses") AND $2 = ANY(u."statuses")) ORDER BY u."id" ASC LIMIT $3 OFFSET $4`,
+			args:   []any{"ok", "passed", int64(10), int64(0)},
+		},
+		{
+			name: "EXCLUDES and NULL test",
+			kind: easylist.KindPage, req: easylist.Request{},
+			filter: "tags EXCLUDES 'go' AND labels != NULL",
+			sql:    `SELECT u."id" AS "id" FROM runs AS u LEFT JOIN LATERAL (SELECT array_agg(name ORDER BY name) AS names FROM labels WHERE run_id = u.id) l ON TRUE WHERE (COALESCE(NOT ($1 = ANY(u."tags")), TRUE) AND (l.names) IS NOT NULL) ORDER BY u."id" ASC LIMIT $2 OFFSET $3`,
+			args:   []any{"go", int64(100), int64(0)},
+		},
+		{
+			name: "count with array filter",
+			kind: easylist.KindCount, req: easylist.Request{Fields: []string{"tags"}},
+			filter: "statuses EXCLUDES 'skipped,failed'",
+			sql:    `SELECT COUNT(*) FROM runs AS u WHERE COALESCE(NOT ($1 = ANY(u."statuses") OR $2 = ANY(u."statuses")), TRUE)`,
+			args:   []any{"skipped", "failed"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sql, args := compile(t, arraysList, tc.kind, tc.req, tc.filter)
+			if sql != tc.sql || len(args) != len(tc.args) || (len(args) > 0 && !reflect.DeepEqual(args, tc.args)) {
 				t.Errorf("got\n%s\n%#v\nwant\n%s\n%#v", sql, args, tc.sql, tc.args)
 			}
 		})

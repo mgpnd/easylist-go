@@ -10,7 +10,7 @@ For a list named `users` (prefix `Users`; `order_items` becomes `OrderItems`) th
 
 - `UsersRow` with one field per SQL and calculated field, non-null unless the field is nullable, and `UsersPage { items: [UsersRow!]!, totalCount: Int! }`.
 - An enum per enum field, such as `UsersStatus { ACTIVE ON_HOLD }`.
-- `UsersSortField` (SQL fields only), `input UsersSort { field: UsersSortField!, direction: SortDirection! = ASC }`, and `input UsersListInput { filter: String, sort: [UsersSort!], limit: Int, offset: Int }`.
+- `UsersSortField` (SQL fields that are not arrays), `input UsersSort { field: UsersSortField!, direction: SortDirection! = ASC }`, and `input UsersListInput { filter: String, sort: [UsersSort!], limit: Int, offset: Int }`.
 - `UsersExportField` (SQL and calculated fields) and `input UsersExportInput { fields: [UsersExportField!]!, filter: String, sort: [UsersSort!], format: ExportFormat! }`.
 
 Once for all lists it declares `SortDirection { ASC DESC }`, `ExportFormat { CSV XLSX }`, `ExportJob { id: ID! }`, and the scalars the lists use:
@@ -26,6 +26,8 @@ Once for all lists it declares `SortDirection { ASC DESC }`, `ExportFormat { CSV
 | timestamp | `Time` (RFC 3339) |
 | uuid | `UUID` |
 | enum | `<Prefix><Field>`, values in upper snake case |
+
+An array field is a list of its element type with non-null elements: `tags: [String!]!` when the field is not nullable and `tags: [String!]` when it is. An enum array uses the field's generated enum, as in `statuses: [UsersStatuses!]`. A NULL array resolves to `null` and an empty array to `[]`. In the generated Go code an array is a slice, such as `[]string` or `[]UsersStatuses`, with no pointer even when nullable: a nil slice is `null`. Calculated array methods return `([]T, error)` whether or not the field is nullable. Array fields cannot be sorted on, so `UsersSortField` leaves them out; they can be exported.
 
 The plugin writes this SDL to `easylist/*.graphqls` next to `gqlgen.yml` so gqlgen can embed it. Commit those files with the rest of the generated code. If your schema already declares a type the plugin would declare, generation fails with an error naming it, for example `Cannot redeclare type UsersRow`.
 

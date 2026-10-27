@@ -10,9 +10,12 @@ type UsersRow {
   created_at: Time!
   status: UsersStatus!
   country: String
+  tags: [String!]
+  roles: [UsersRoles!]!
   display: String!
   initials: String
   tier: UsersTier!
+  labels: [String!]!
 }
 
 type UsersPage {
@@ -23,6 +26,11 @@ type UsersPage {
 enum UsersStatus {
   ACTIVE
   ON_HOLD
+}
+
+enum UsersRoles {
+  ADMIN
+  EDITOR
 }
 
 enum UsersTier {
@@ -68,9 +76,12 @@ enum UsersExportField {
   CREATED_AT
   STATUS
   COUNTRY
+  TAGS
+  ROLES
   DISPLAY
   INITIALS
   TIER
+  LABELS
 }
 
 input UsersExportInput {

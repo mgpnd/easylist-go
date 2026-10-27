@@ -1,0 +1,48 @@
+type UsersRow {
+  id: Int64!
+  tags: [String!]!
+  statuses: [UsersStatuses!]
+  group_ids: [UUID!]!
+  labels: [String!]!
+}
+
+type UsersPage {
+  items: [UsersRow!]!
+  totalCount: Int!
+}
+
+enum UsersStatuses {
+  OK
+  FAILED
+}
+
+enum UsersSortField {
+  ID
+}
+
+input UsersSort {
+  field: UsersSortField!
+  direction: SortDirection! = ASC
+}
+
+input UsersListInput {
+  filter: String
+  sort: [UsersSort!]
+  limit: Int
+  offset: Int
+}
+
+enum UsersExportField {
+  ID
+  TAGS
+  STATUSES
+  GROUP_IDS
+  LABELS
+}
+
+input UsersExportInput {
+  fields: [UsersExportField!]!
+  filter: String
+  sort: [UsersSort!]
+  format: ExportFormat!
+}

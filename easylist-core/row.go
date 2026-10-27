@@ -3,6 +3,7 @@ package easylist
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"time"
 )
@@ -49,6 +50,24 @@ func (r Row) Bool(name string) (bool, bool) { return rowValue[bool](r, name) }
 // Time returns a date or timestamp value.
 func (r Row) Time(name string) (time.Time, bool) { return rowValue[time.Time](r, name) }
 
+// The array accessors below return the slice stored in the row, without
+// copying it. Callers must not modify it.
+
+// Strings returns a text, numeric, uuid, or enum array value.
+func (r Row) Strings(name string) ([]string, bool) { return rowValue[[]string](r, name) }
+
+// Int64s returns an integer array value.
+func (r Row) Int64s(name string) ([]int64, bool) { return rowValue[[]int64](r, name) }
+
+// Float64s returns a float array value.
+func (r Row) Float64s(name string) ([]float64, bool) { return rowValue[[]float64](r, name) }
+
+// Bools returns a boolean array value.
+func (r Row) Bools(name string) ([]bool, bool) { return rowValue[[]bool](r, name) }
+
+// Times returns a date or timestamp array value.
+func (r Row) Times(name string) ([]time.Time, bool) { return rowValue[[]time.Time](r, name) }
+
 func rowValue[T any](r Row, name string) (T, bool) {
 	v, ok := r.values[name].(T)
 	return v, ok
@@ -68,20 +87,33 @@ func (r Row) Calc(ctx context.Context, name string) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("calculated field %q: %w", name, err)
 	}
+	if f.Array && v != nil {
+		// A nil slice is an empty array, not NULL.
+		if rv := reflect.ValueOf(v); rv.IsNil() {
+			v = reflect.MakeSlice(rv.Type(), 0, 0).Interface()
+		}
+	}
 	if err := checkEnumValue(f, v); err != nil {
 		return nil, fmt.Errorf("calculated field %q: %w", name, err)
 	}
 	return v, nil
 }
 
-// checkEnumValue rejects an enum value that is not declared, so it can never
-// reach a client as a silent NULL.
+// checkEnumValue rejects an enum value, or enum array element, that is not
+// declared, so it can never reach a client as a silent NULL.
 func checkEnumValue(f *Field, v any) error {
 	if f.Type != Enum || v == nil {
 		return nil
 	}
-	if s, _ := v.(string); !slices.Contains(f.Values, s) {
-		return fmt.Errorf("value %q is not a declared enum value", v)
+	values, _ := v.([]string)
+	if !f.Array {
+		s, _ := v.(string)
+		values = []string{s}
+	}
+	for _, s := range values {
+		if !slices.Contains(f.Values, s) {
+			return fmt.Errorf("value %q is not a declared enum value", s)
+		}
 	}
 	return nil
 }

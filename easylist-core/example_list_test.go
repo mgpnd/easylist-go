@@ -8,8 +8,8 @@ import (
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
 )
 
-// ExampleList declares a list using every field type. It has no Output
-// comment, so it is compiled but not run.
+// ExampleList declares a list using every field type and array fields. It has
+// no Output comment, so it is compiled but not run.
 func ExampleList() {
 	_ = easylist.List{
 		Name: "products", Table: "products", Alias: "p", PrimaryKey: "id",
@@ -27,6 +27,9 @@ func ExampleList() {
 			{Name: "updated_at", Type: easylist.Timestamp},
 			{Name: "kind", Type: easylist.Enum, Values: []string{"physical", "digital"}},
 			{Name: "vendor", Type: easylist.Text, Nullable: true, SQL: "v.name", Joins: []string{"vendor"}},
+			{Name: "tags", Type: easylist.Text, Array: true, Nullable: true},
+			{Name: "sizes", Type: easylist.Integer, Array: true, SQL: "ARRAY(SELECT s.size FROM sizes s WHERE s.product_id = p.id ORDER BY s.size)"},
+			{Name: "channels", Type: easylist.Enum, Array: true, Values: []string{"web", "store"}},
 			easylist.Calc("label", easylist.Text, func(_ context.Context, r easylist.Row) (string, error) {
 				name, _ := r.String("name")
 				return strings.ToUpper(name), nil
@@ -45,6 +48,13 @@ func ExampleList() {
 				}
 				return "low", nil
 			}, "stock").WithValues("high", "low"),
+			easylist.Calc("badges", easylist.Text, func(_ context.Context, r easylist.Row) ([]string, error) {
+				var badges []string
+				if visible, _ := r.Bool("visible"); visible {
+					badges = append(badges, "visible")
+				}
+				return badges, nil
+			}, "visible"),
 		},
 		Joins: []easylist.Join{
 			{Key: "vendor", SQL: "LEFT JOIN vendors v ON v.id = p.vendor_id"},

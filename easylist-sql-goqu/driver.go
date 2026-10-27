@@ -57,7 +57,12 @@ func (*Driver) Compile(p *easylist.Plan) (string, []any, error) {
 		}
 		cols := make([]any, len(p.Fields))
 		for i, f := range p.Fields {
-			cols[i] = fieldExpression(p, f, false).As(goqu.C(f.Name))
+			expr := fieldExpression(p, f, false)
+			if f.Array {
+				// Arrays reach the runtime as JSON text; to_json keeps NULL arrays NULL.
+				expr = goqu.L("to_json(?)::text", expr)
+			}
+			cols[i] = expr.As(goqu.C(f.Name))
 		}
 		ds = ds.Select(cols...)
 		order := make([]exp.OrderedExpression, len(p.Order))

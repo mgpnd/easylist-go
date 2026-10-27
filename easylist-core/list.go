@@ -39,7 +39,7 @@ func (t Type) String() string {
 
 func (t Type) valid() bool { return t >= Text && t <= Enum }
 
-// goType is the Go representation of a value of type t.
+// goType is the Go representation of a scalar value of type t.
 func (t Type) goType() reflect.Type {
 	switch t {
 	case Integer:
@@ -78,7 +78,10 @@ type Field struct {
 	Name     string // Matches ^[a-z_][a-z0-9_]*$.
 	Type     Type
 	Nullable bool
-	Values   []string // Declared values of an Enum field.
+	// Array makes the field an array of Type, read as a Go slice of Type's
+	// representation. Nullable applies to the array; elements are never NULL.
+	Array  bool
+	Values []string // Declared values of an Enum field, or of its elements.
 	// SQL is the field's expression. When empty, the field reads the column
 	// named Name from the base table alias.
 	SQL   string
@@ -101,9 +104,10 @@ type calc struct {
 }
 
 // Calc declares a non-nullable calculated field evaluated once per row from
-// the SQL fields it requires. T must be the Go representation of typ.
+// the SQL fields it requires. T must be the Go representation of typ, or a
+// slice of it, which declares an array field.
 func Calc[T any](name string, typ Type, fn func(ctx context.Context, r Row) (T, error), requires ...string) Field {
-	return Field{Name: name, Type: typ, calc: &calc{
+	return Field{Name: name, Type: typ, Array: isSlice[T](), calc: &calc{
 		fn:       func(ctx context.Context, r Row) (any, error) { return fn(ctx, r) },
 		requires: requires,
 		goType:   reflect.TypeFor[T](),
@@ -112,7 +116,7 @@ func Calc[T any](name string, typ Type, fn func(ctx context.Context, r Row) (T, 
 
 // CalcNullable declares a nullable calculated field. A nil result is NULL.
 func CalcNullable[T any](name string, typ Type, fn func(ctx context.Context, r Row) (*T, error), requires ...string) Field {
-	return Field{Name: name, Type: typ, Nullable: true, calc: &calc{
+	return Field{Name: name, Type: typ, Nullable: true, Array: isSlice[T](), calc: &calc{
 		fn: func(ctx context.Context, r Row) (any, error) {
 			v, err := fn(ctx, r)
 			if err != nil || v == nil {
@@ -123,6 +127,16 @@ func CalcNullable[T any](name string, typ Type, fn func(ctx context.Context, r R
 		requires: requires,
 		goType:   reflect.TypeFor[T](),
 	}}
+}
+
+func isSlice[T any]() bool { return reflect.TypeFor[T]().Kind() == reflect.Slice }
+
+// goType is the Go representation of the field's values.
+func (f Field) goType() reflect.Type {
+	if f.Array {
+		return reflect.SliceOf(f.Type.goType())
+	}
+	return f.Type.goType()
 }
 
 // WithTitle returns f with its export title set.

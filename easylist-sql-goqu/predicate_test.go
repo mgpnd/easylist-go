@@ -15,7 +15,8 @@ import (
 	"github.com/doug-martin/goqu/v9/exp"
 )
 
-// predicateList has one field per type, plus a field read through author SQL.
+// predicateList has one scalar and one array field per type, plus fields
+// read through author SQL.
 var predicateList = easylist.List{
 	Name: "t", Table: "t", Alias: "t", PrimaryKey: "uid",
 	Fields: []easylist.Field{
@@ -29,6 +30,16 @@ var predicateList = easylist.List{
 		{Name: "active", Type: easylist.Boolean},
 		{Name: "status", Type: easylist.Enum, Values: []string{"active", "blocked"}},
 		{Name: "full", Type: easylist.Text, SQL: "t.first || ' ' || t.last"},
+		{Name: "tags", Type: easylist.Text, Array: true, Nullable: true},
+		{Name: "ids", Type: easylist.Integer, Array: true},
+		{Name: "scores", Type: easylist.Float, Array: true},
+		{Name: "prices", Type: easylist.Numeric, Array: true},
+		{Name: "flags", Type: easylist.Boolean, Array: true},
+		{Name: "days", Type: easylist.Date, Array: true},
+		{Name: "seen", Type: easylist.Timestamp, Array: true},
+		{Name: "groups", Type: easylist.UUID, Array: true},
+		{Name: "statuses", Type: easylist.Enum, Array: true, Values: []string{"ok", "skipped", "failed"}},
+		{Name: "labels", Type: easylist.Text, Array: true, SQL: "l.names"},
 	},
 }
 
@@ -292,4 +303,115 @@ func parsePredicate(t *testing.T, input string) filter.Predicate {
 		t.Fatalf("want predicate, got %T", expr)
 	}
 	return predicate
+}
+
+func TestBuildPredicateArrays(t *testing.T) {
+	day := time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC)
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		filter, clause string
+		args           []any
+	}{
+		{"tags CONTAINS 'go'", `WHERE ($1 = ANY(t."tags"))`, []any{"go"}},
+		{"tags CONTAINS 'a,b'", `WHERE ($1 = ANY(t."tags") AND $2 = ANY(t."tags"))`, []any{"a", "b"}},
+		{"tags CONTAINS ' Go , rust '", `WHERE ($1 = ANY(t."tags") AND $2 = ANY(t."tags"))`, []any{"Go", "rust"}},
+		{"tags EXCLUDES 'go'", `WHERE COALESCE(NOT ($1 = ANY(t."tags")), TRUE)`, []any{"go"}},
+		{"ids CONTAINS '7, 8'", `WHERE ($1 = ANY(t."ids") AND $2 = ANY(t."ids"))`, []any{int64(7), int64(8)}},
+		{"ids CONTAINS 7", `WHERE ($1 = ANY(t."ids"))`, []any{int64(7)}},
+		{"ids EXCLUDES -3", `WHERE COALESCE(NOT ($1 = ANY(t."ids")), TRUE)`, []any{int64(-3)}},
+		{"scores CONTAINS '1.5,-2'", `WHERE ($1 = ANY(t."scores") AND $2 = ANY(t."scores"))`, []any{1.5, float64(-2)}},
+		{"scores CONTAINS 2.5", `WHERE ($1 = ANY(t."scores"))`, []any{2.5}},
+		{"prices CONTAINS '10.50, 12345678901234567890.1'", `WHERE ($1::numeric = ANY(t."prices") AND $2::numeric = ANY(t."prices"))`, []any{"10.50", "12345678901234567890.1"}},
+		{"prices EXCLUDES 1", `WHERE COALESCE(NOT ($1::numeric = ANY(t."prices")), TRUE)`, []any{"1"}},
+		{"flags CONTAINS 'TRUE, false'", `WHERE ($1 = ANY(t."flags") AND $2 = ANY(t."flags"))`, []any{true, false}},
+		{"flags EXCLUDES true", `WHERE COALESCE(NOT ($1 = ANY(t."flags")), TRUE)`, []any{true}},
+		{"days CONTAINS '2024-02-29'", `WHERE ($1 = ANY(t."days"))`, []any{day}},
+		{"seen EXCLUDES '2026-01-01T00:00:00Z'", `WHERE COALESCE(NOT ($1 = ANY(t."seen")), TRUE)`, []any{at}},
+		{"groups CONTAINS '0B6C4C1E-3D8E-4F43-9D5A-2A8A0D1D2C3B'", `WHERE ($1 = ANY(t."groups"))`, []any{"0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b"}},
+		{"statuses EXCLUDES 'skipped,failed'", `WHERE COALESCE(NOT ($1 = ANY(t."statuses") OR $2 = ANY(t."statuses")), TRUE)`, []any{"skipped", "failed"}},
+		{"statuses CONTAINS 'ok'", `WHERE ($1 = ANY(t."statuses"))`, []any{"ok"}},
+		{"labels CONTAINS 'x'", `WHERE ($1 = ANY((l.names)))`, []any{"x"}},
+		{"tags = NULL", `WHERE t."tags" IS NULL`, []any{}},
+		{"statuses != NULL", `WHERE t."statuses" IS NOT NULL`, []any{}},
+		{"labels = NULL", `WHERE (l.names) IS NULL`, []any{}},
+		// Scalar text fields keep the substring search and never split lists.
+		{"name CONTAINS 'a,b'", `WHERE t."name" ILIKE $1 ESCAPE E'\\'`, []any{"%a,b%"}},
+		{"name EXCLUDES 'a,b'", `WHERE COALESCE(t."name" NOT ILIKE $1 ESCAPE E'\\', TRUE)`, []any{"%a,b%"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter, func(t *testing.T) {
+			sql, args := renderPredicate(t, tc.filter)
+			if !strings.HasSuffix(sql, tc.clause) || len(args) != len(tc.args) || (len(args) > 0 && !reflect.DeepEqual(args, tc.args)) {
+				t.Fatalf("got %q %#v; want suffix %q args %#v", sql, args, tc.clause, tc.args)
+			}
+			// Membership compares with the column's elements directly, so no
+			// argument or column is cast to a named array type.
+			if strings.Contains(sql, "[]") || strings.Contains(sql, "ARRAY") {
+				t.Errorf("array predicate casts to an array type: %q", sql)
+			}
+		})
+	}
+}
+
+func TestBuildPredicateRejectsArrayOperators(t *testing.T) {
+	cases := []struct{ filter, op, field, position string }{
+		{"tags = 'go'", "=", "tags", "position 6"},
+		{"tags != 'go'", "!=", "tags", "position 6"},
+		{"ids > 3", ">", "ids", "position 5"},
+		{"ids <= 3", "<=", "ids", "position 5"},
+		{"ids BETWEEN '1,2'", "BETWEEN", "ids", "position 5"},
+		{"days >= '2024-01-01'", ">=", "days", "position 6"},
+		{"statuses = 'ok'", "=", "statuses", "position 10"},
+		{"flags = TRUE", "=", "flags", "position 7"},
+		{"labels != 'x'", "!=", "labels", "position 8"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter, func(t *testing.T) {
+			_, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			for _, want := range []string{"unsupported operator", `"` + tc.op + `"`, `"` + tc.field + `"`, tc.position} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %s", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildPredicateRejectsArrayValues(t *testing.T) {
+	cases := []struct {
+		filter string
+		want   []string
+	}{
+		{"tags CONTAINS 'a,,b'", []string{"empty item", `"tags"`, "position 15"}},
+		{"tags CONTAINS ''", []string{"empty item", "position 15"}},
+		{"tags EXCLUDES 'a, '", []string{"empty item", "position 15"}},
+		{"ids CONTAINS '7,x'", []string{`"x"`, `"ids"`, "position 14"}},
+		{"ids CONTAINS '7,8.5'", []string{`"8.5"`, "position 14"}},
+		{"ids CONTAINS 1.5", []string{`"1.5"`, "position 14"}},
+		{"statuses EXCLUDES 'skipped,archived'", []string{`"archived"`, "not a declared value", "position 19"}},
+		{"statuses CONTAINS 'OK'", []string{`"OK"`, "position 19"}},
+		{"tags CONTAINS 1", []string{`"tags"`, "position 15"}},
+		{"flags CONTAINS 'yes'", []string{`"yes"`, "position 16"}},
+		{"prices CONTAINS '1,2e3'", []string{`"2e3"`, "position 17"}},
+		{"scores CONTAINS 'NaN'", []string{`"NaN"`, "position 17"}},
+		{"days CONTAINS '2025-02-29'", []string{`"2025-02-29"`, "position 15"}},
+		{"seen CONTAINS '2026-01-01T00:00:00'", []string{"offset", "position 15"}},
+		{"groups CONTAINS 'a'", []string{`"a"`, "position 17"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter, func(t *testing.T) {
+			expr, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			if expr != nil || err == nil {
+				t.Fatalf("want an error, got %#v", expr)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %s", err, want)
+				}
+			}
+		})
+	}
 }

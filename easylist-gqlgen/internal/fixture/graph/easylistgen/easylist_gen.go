@@ -28,6 +28,8 @@ type UsersRow struct {
 	CreatedAt time.Time
 	Status    UsersStatus
 	Country   *string
+	Tags      []string
+	Roles     []UsersRoles
 
 	row easylist.Row
 }
@@ -71,6 +73,15 @@ func newUsersRow(r easylist.Row) *UsersRow {
 		x := v
 		out.Country = &x
 	}
+	if v, ok := r.Strings("tags"); ok {
+		out.Tags = v
+	}
+	if v, ok := r.Strings("roles"); ok {
+		out.Roles = make([]UsersRoles, len(v))
+		for i, s := range v {
+			out.Roles[i] = UsersRoles(s)
+		}
+	}
 	return out
 }
 
@@ -104,6 +115,15 @@ func (r *UsersRow) Tier(ctx context.Context) (UsersTier, error) {
 	return UsersTier(v.(string)), nil
 }
 
+// Labels evaluates calculated field "labels" for this row.
+func (r *UsersRow) Labels(ctx context.Context) ([]string, error) {
+	v, err := r.row.Calc(ctx, "labels")
+	if err != nil || v == nil {
+		return nil, err
+	}
+	return v.([]string), nil
+}
+
 type UsersPage struct {
 	Items      []*UsersRow
 	TotalCount int
@@ -118,6 +138,18 @@ func (e UsersStatus) MarshalGQL(w io.Writer) { usersStatusEnum.Marshal(w, e) }
 
 func (e *UsersStatus) UnmarshalGQL(v any) (err error) {
 	*e, err = usersStatusEnum.Unmarshal(v)
+	return err
+}
+
+// UsersRoles holds a declared value of field "roles".
+type UsersRoles string
+
+var usersRolesEnum = easylistgql.NewEnum[UsersRoles]("UsersRoles", "admin", "ADMIN", "editor", "EDITOR")
+
+func (e UsersRoles) MarshalGQL(w io.Writer) { usersRolesEnum.Marshal(w, e) }
+
+func (e *UsersRoles) UnmarshalGQL(v any) (err error) {
+	*e, err = usersRolesEnum.Unmarshal(v)
 	return err
 }
 
@@ -148,7 +180,7 @@ func (e *UsersSortField) UnmarshalGQL(v any) (err error) {
 // UsersExportField holds the name of an exportable field.
 type UsersExportField string
 
-var usersExportFieldEnum = easylistgql.NewEnum[UsersExportField]("UsersExportField", "id", "ID", "uid", "UID", "name", "NAME", "age", "AGE", "score", "SCORE", "balance", "BALANCE", "active", "ACTIVE", "born", "BORN", "created_at", "CREATED_AT", "status", "STATUS", "country", "COUNTRY", "display", "DISPLAY", "initials", "INITIALS", "tier", "TIER")
+var usersExportFieldEnum = easylistgql.NewEnum[UsersExportField]("UsersExportField", "id", "ID", "uid", "UID", "name", "NAME", "age", "AGE", "score", "SCORE", "balance", "BALANCE", "active", "ACTIVE", "born", "BORN", "created_at", "CREATED_AT", "status", "STATUS", "country", "COUNTRY", "tags", "TAGS", "roles", "ROLES", "display", "DISPLAY", "initials", "INITIALS", "tier", "TIER", "labels", "LABELS")
 
 func (e UsersExportField) MarshalGQL(w io.Writer) { usersExportFieldEnum.Marshal(w, e) }
 

@@ -77,7 +77,10 @@ type PlanField struct {
 	SQL      string // Empty means the column Name of the base table alias.
 	Type     Type
 	Nullable bool
-	Values   []string // Enum values.
+	// Array marks an array of Type. Drivers select it as JSON array text, or
+	// NULL, and accept only CONTAINS, EXCLUDES, = NULL, and != NULL on it.
+	Array  bool
+	Values []string // Enum values.
 }
 
 // PlanOrder is one ORDER BY entry.
@@ -104,7 +107,7 @@ type Driver interface {
 }
 
 func planField(f *Field) PlanField {
-	return PlanField{Name: f.Name, SQL: f.SQL, Type: f.Type, Nullable: f.Nullable, Values: f.Values}
+	return PlanField{Name: f.Name, SQL: f.SQL, Type: f.Type, Nullable: f.Nullable, Array: f.Array, Values: f.Values}
 }
 
 // Plan validates req against the list and builds a plan of the given kind.
@@ -234,6 +237,9 @@ func (c *CompiledList) order(sorts []Sort) ([]PlanOrder, error) {
 		}
 		if f.calc != nil {
 			return nil, fmt.Errorf("cannot sort on calculated field %q", s.Field)
+		}
+		if f.Array {
+			return nil, fmt.Errorf("cannot sort on array field %q", s.Field)
 		}
 		if seen[s.Field] {
 			return nil, fmt.Errorf("field %q is sorted more than once", s.Field)

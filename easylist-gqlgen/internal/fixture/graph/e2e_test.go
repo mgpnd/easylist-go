@@ -106,3 +106,21 @@ func TestEndToEnd(t *testing.T) {
 		t.Errorf("export queries = %#v", db.calls)
 	}
 }
+
+func TestEndToEndArrays(t *testing.T) {
+	db := &sqlDB{page: [][]any{{int64(1), `["go","rust"]`, `["editor"]`}, {int64(2), nil, `[]`}}}
+	rt := &easylist.Runtime{Driver: sqlgoqu.New(), DB: db}
+	resp := run(t, rt, `{ people(query: {filter: "tags CONTAINS 'go, rust' OR roles EXCLUDES 'admin'", limit: 10}) { items { tags roles } } }`)
+	if len(resp.Errors) > 0 {
+		t.Fatalf("errors: %+v", resp.Errors)
+	}
+	if want := `{"people":{"items":[{"tags":["go","rust"],"roles":["EDITOR"]},{"tags":null,"roles":[]}]}}`; string(resp.Data) != want {
+		t.Errorf("data = %s", resp.Data)
+	}
+	want := []sqlCall{{`SELECT u."id" AS "id", to_json(u."tags")::text AS "tags", to_json(u."roles")::text AS "roles" FROM users AS u ` +
+		`WHERE ((u.deleted_at IS NULL) AND (($1 = ANY(u."tags") AND $2 = ANY(u."tags")) OR COALESCE(NOT ($3 = ANY(u."roles")), TRUE))) ` +
+		`ORDER BY u."id" ASC LIMIT $4 OFFSET $5`, []any{"go", "rust", "admin", int64(10), int64(0)}}}
+	if !reflect.DeepEqual(db.calls, want) {
+		t.Errorf("queries =\n%#v\nwant\n%#v", db.calls, want)
+	}
+}

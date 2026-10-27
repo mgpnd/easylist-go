@@ -52,14 +52,27 @@ func (s Scalars) scalarFor(t easylist.Type) (name string, custom bool) {
 	panic(fmt.Sprintf("easylistgql: no scalar for type %s", t))
 }
 
-// graphQLType returns a field's GraphQL type, without the non-null marker.
+// graphQLType returns a field's GraphQL type, without the outer non-null
+// marker. Arrays are lists of non-null elements.
 func graphQLType(l *easylist.CompiledList, f easylist.Field, s Scalars) string {
+	if f.Array {
+		return "[" + elementType(l, f, s) + "!]"
+	}
+	return elementType(l, f, s)
+}
+
+// elementType returns the GraphQL type of a field's values, or of its
+// elements when it is an array: a scalar, or the field's generated enum.
+func elementType(l *easylist.CompiledList, f easylist.Field, s Scalars) string {
 	if f.Type == easylist.Enum {
 		return l.TypePrefix() + easylist.PascalCase(f.Name)
 	}
 	name, _ := s.scalarFor(f.Type)
 	return name
 }
+
+// sortable reports whether a field can be a sort entry.
+func sortable(f easylist.Field) bool { return !f.Calculated() && !f.Array }
 
 // listSDL returns the types generated for one list.
 func listSDL(l *easylist.CompiledList, s Scalars) string {
@@ -83,7 +96,7 @@ func listSDL(l *easylist.CompiledList, s Scalars) string {
 		if f.Type != easylist.Enum {
 			continue
 		}
-		fmt.Fprintf(&b, "enum %s {\n", graphQLType(l, f, s))
+		fmt.Fprintf(&b, "enum %s {\n", elementType(l, f, s))
 		for _, v := range f.Values {
 			fmt.Fprintf(&b, "  %s\n", easylist.EnumName(v))
 		}
@@ -92,7 +105,7 @@ func listSDL(l *easylist.CompiledList, s Scalars) string {
 
 	fmt.Fprintf(&b, "enum %sSortField {\n", p)
 	for _, f := range fields {
-		if !f.Calculated() {
+		if sortable(f) {
 			fmt.Fprintf(&b, "  %s\n", easylist.EnumName(f.Name))
 		}
 	}
