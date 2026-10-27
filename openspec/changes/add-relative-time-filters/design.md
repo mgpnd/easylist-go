@@ -12,8 +12,9 @@ See proposal.md (Why) for the motivation and specs/ for the required behaviour. 
 ## Goals / Non-Goals
 
 **Goals:**
-- Keep `easylist-filter` free of schemas, SQL, and the system clock: it parses, type-checks, and evaluates against a reference time it is given.
-- Report syntax and type errors at parse time with byte positions, the same as existing errors.
+- Keep the parser's job to syntax: it builds an expression tree that mirrors the source and never calculates, simplifies, or type-checks.
+- Evaluate once, in one place: the `easylist-core` planner, so every driver gets identical semantics without reimplementing arithmetic.
+- Report syntax errors at parse time and type and evaluation errors at planning time, all with byte positions.
 - Make results deterministic and testable: one reference time per request, set at the edge (GraphQL resolver, runtime, or export request).
 - Make relative date comparisons on timestamp columns behave the way users read them ("this week" includes all of Sunday).
 
@@ -25,43 +26,57 @@ See proposal.md (Why) for the motivation and specs/ for the required behaviour. 
 
 ## Decisions
 
-### Relative values are a literal kind evaluated by consumers
-The parser produces a `Literal` of the new kind `LiteralTime`. `Literal.Time()` returns a `*TimeValue` (nil for other kinds) with:
+### Expression values are an unevaluated tree
+A bare keyword or a brace expression parses to a `Literal` of the new kind `LiteralExpr`. `Literal.Expr()` returns the root `ExprNode` (nil for other kinds). The nodes are sealed interfaces in the style of `Predicate` and `Logical`:
 
 ```go
-func (v *TimeValue) IsDate() bool
-func (v *TimeValue) Eval(now time.Time, weekStart time.Weekday) (time.Time, error)
+type ExprNode interface{ exprNode(); Pos() int }
+type NumberNode interface{ ExprNode; Text() string }            // unsigned source spelling
+type KeywordNode interface{ ExprNode; Keyword() TimeKeyword; Text() string }
+type DurationNode interface{ ExprNode; Amount() string; Unit() TimeUnit; UnitPos() int }
+type BinaryNode interface{ ExprNode; Operator() ArithOp; Left() ExprNode; Right() ExprNode } // Pos is the operator's
+type NegationNode interface{ ExprNode; Operand() ExprNode }
 ```
 
-`now` carries the time zone. Dates come back as midnight in that zone. `TimeValue` is an immutable, opaque tree (keyword base plus a list of operations), so the AST stays read-only and safe to share.
+Grammar actions only allocate nodes. Parentheses shape the tree and leave no node behind. Nothing is folded, so `{100 * 3}` stays a `*` node, and `{NOW - TODAY}` and `{1 / 0}` parse successfully. The only checks in actions are syntactic: decimal duration amounts, unit names, keyword names, and which operators may take an expression value.
 
-*Alternative:* a `filter.Resolve(expr, now)` pass that rewrites relative values into string literals before planning. This was rejected because the driver needs to know that the value is a date, so it can apply whole-day comparisons to timestamp fields. Also, a rewritten tree would have to be rebuilt for every request, while an evaluable literal lets one parsed filter be compiled many times.
+*Alternative:* fold numbers and type-check in grammar actions. This was rejected because it makes the parser interpret the language, ties the AST to one set of semantics, and stops anything from inspecting the tree as written.
+
+### The planner type-checks and evaluates
+`easylist-core` gains an evaluator (`eval.go`) that walks an `ExprNode` with an environment of reference time, time zone (the location of `Request.Now`), and week start. It returns a typed `Value`:
+
+```go
+type ValueKind uint8 // ValueNumber, ValueDate, ValueTimestamp
+type Value struct {
+	Kind   ValueKind
+	Number string    // exact decimal text, for ValueNumber
+	Time   time.Time // midnight in the zone for ValueDate; the instant for ValueTimestamp
+}
+```
+
+`CompiledList.Plan` runs it for each predicate whose value is a `LiteralExpr`, during the tree walk it already does in `filterFields`. It checks the result kind against the field (`Integer`/`Float`/`Numeric` take numbers; `Date` takes dates; `Timestamp` takes dates and timestamps; array fields reject expressions) and stores the results in a map keyed by predicate node. Drivers read them with `Plan.Value(pred)`. Core already owns field types, so it is the only layer that can type-check without duplicating them, and it is the layer every driver shares.
+
+Number arithmetic uses `math/big.Rat`. A result whose reduced denominator has prime factors other than 2 and 5 has no finite decimal form and is an error at the `/`. Results are rendered as plain decimal text, which drivers convert exactly as they convert number literals, so integer fields still reject `2.5`.
+
+*Alternative:* each driver evaluates (directly, or with a shared helper in `easylist-filter`). This was rejected because every driver would repeat the type rules and could drift, and the filter module would gain clock-dependent semantics.
 
 *Alternative:* SQL expressions (`now()`, `date_trunc`, `interval`). This was rejected because results would depend on the database session's time zone, business days have no clean SQL form, and tests would need a database clock.
 
-### Numeric brace expressions are folded at parse time
-A brace expression with no time keywords or durations is evaluated with `math/big.Rat` and becomes a `LiteralNumber` whose text is the exact decimal result. A quotient whose denominator has prime factors other than 2 and 5 has no finite decimal form and is rejected. This keeps every driver unchanged for numbers and keeps numeric fields exact.
-
-### Types are checked in the parser
-Each brace sub-expression has a static type: number, duration, date, or timestamp. Grammar actions build typed nodes and return errors at the operator position (through the existing `parseState` error path). "Date + HOURS → timestamp" is known statically, so `IsDate()` never depends on the reference time. Integer-only rules (the amount of `n::UNIT`, the multiplier of a duration, exact division of a duration) are checked while folding the integer parts, so `{TODAY + 2*7::DAYS}` folds to one `+14::DAYS` step.
-
 ### Durations are ordered lists of unit amounts
-A duration is a list of `(amount, unit)` terms in the order written. `+` concatenates the lists, `-` concatenates the negated right-hand list, unary `-` negates every term, `* k` multiplies every term, and `/ k` divides every term and fails unless each divides exactly. Terms are never merged or reordered, so adding `(1::DAYS + 2::HOURS)` applies the day step and then the hour step, exactly like `+ 1::DAYS + 2::HOURS`. Calendar days and elapsed hours do not commute across a DST change, so the order must be preserved. A duration is date-preserving only if every term is `DAYS` or `BUSINESS_DAYS`.
-
-*Alternative:* allowing only same-unit durations to be added together. This was rejected as needlessly strict: a mixed duration has a clear meaning once its terms are applied in order.
+During evaluation, a duration is a list of `(amount, unit)` terms in the order written. `+` concatenates the lists, `-` concatenates the negated right-hand list, unary `-` negates every term, `* k` multiplies every term, and `/ k` divides every term and fails unless each divides exactly. Terms are never merged or reordered, so adding `(1::DAYS + 2::HOURS)` applies the day step and then the hour step, exactly like `+ 1::DAYS + 2::HOURS`. Calendar days and elapsed hours do not commute across a DST change, so the order must be preserved. A date stays a date only if every term is `DAYS` or `BUSINESS_DAYS`. The result type is determined by the tree's structure alone, never by the reference time.
 
 ### Keywords only on the value side
-The lexer keeps scanning `today` as `tIDENT`. A new grammar alternative `tIDENT ordinary_op tIDENT` (restricted to comparison operators in the action) maps the right-hand identifier through a keyword table and reports an unknown word at its position. A quoted identifier on the right is rejected. This avoids reserving words that are likely to be column names (`now`, `today`). The cost is that the action, rather than the grammar, rejects `CONTAINS TODAY`. Both still produce a positioned syntax error.
+The lexer keeps scanning `today` as `tIDENT`. A new grammar alternative `tIDENT ordinary_op tIDENT` (restricted to comparison operators in the action) maps the right-hand identifier through a keyword table into a `KeywordNode`, and reports an unknown word at its position. A quoted identifier on the right is rejected. This avoids reserving words that are likely to be column names (`now`, `today`). The cost is that the action, rather than the grammar, rejects `CONTAINS TODAY`. Both still produce a positioned syntax error.
 
 ### Lexer brace mode
 `{` switches the lexer into expression mode until the matching `}`. In this mode, `+ - * / ( )` are operator tokens, numbers are unsigned, `::` is a token, and identifiers are units or keywords. Outside braces, scanning is unchanged, so `age > -3` still lexes `-3` as a number. A nested `{` is an error.
 
 ### Whole-day comparisons in the driver
-`predicateArgument` gains a time path. For a date-valued `TimeValue` on a `Timestamp` field, the driver computes `S` (midnight of `D` in the plan zone) and `E = S.AddDate(0, 0, 1)`, which is DST-correct. It then rewrites the operator as in the `contract-sql-driver` table. `=` and `!=` compile to a range test and its `COALESCE(NOT …, TRUE)` negation, matching how `EXCLUDES` already handles NULL. Fixed string dates on timestamp fields keep their current behaviour; only relative values get day semantics, so existing filters are unaffected.
+`buildPredicate` reads a `LiteralExpr` value from `Plan.Value`. For a `ValueDate` on a `Timestamp` field, the driver takes `S = Value.Time` (midnight of `D` in the request zone) and `E = S.AddDate(0, 0, 1)`, which is DST-correct. It then rewrites the operator as in the `contract-sql-driver` table. `=` and `!=` compile to a range test and its `COALESCE(NOT …, TRUE)` negation, matching how `EXCLUDES` already handles NULL. Fixed string dates on timestamp fields keep their current behaviour; only relative values get day semantics, so existing filters are unaffected.
 
 ### Where the reference time comes from
-- `easylist.Request` gains `Now time.Time` (instant plus zone) and `WeekStart *time.Weekday`. `Plan` gains `Now time.Time` and `WeekStart time.Weekday`, with nil defaulting to Monday. A pointer is needed because `time.Sunday` is the zero value.
-- `CompiledList.Plan` never reads the clock. It fails if the filter contains a `LiteralTime` and `Now` is zero, because silently using the system clock would make planning nondeterministic.
+- `easylist.Request` gains `Now time.Time` (instant plus zone) and `WeekStart *time.Weekday`, with nil meaning Monday. A pointer is needed because `time.Sunday` is the zero value. `Plan` carries only evaluated values, not the clock inputs.
+- `CompiledList.Plan` never reads the clock. It fails if the filter contains a time keyword and `Now` is zero, because silently using the system clock would make planning nondeterministic.
 - `easylist.Runtime` gains `Clock func() time.Time` (nil means `time.Now`, which is server-local) and `WeekStart *time.Weekday`. `Runtime.Fetch` fills missing `Now` and `WeekStart` before planning. Tests inject `Clock`.
 - `easylistgql.ListInput.Timezone *int`: when set, the resolver sets `req.Now = rt.Now().In(time.FixedZone("", m*60))`. A shared `easylist.UTCOffset(minutes) (*time.Location, error)` validates the range -720…840 for both GraphQL and exports.
 
@@ -74,7 +89,8 @@ The lexer keeps scanning `today` as `tIDENT`. A new grammar alternative `tIDENT 
 
 ## Risks / Trade-offs
 
-- [New `LiteralKind` breaks exhaustive switches in third-party drivers] → Documented in the README and the AST doc comment. Drivers already need a default branch, which `LiteralNull` established.
+- [New `LiteralKind` breaks exhaustive switches in third-party drivers] → Documented in the README and the AST doc comment. Drivers already need a default branch, which `LiteralNull` established, and they get evaluated values from `Plan.Value` without having to walk the tree.
+- [Type errors move from parse time to planning time] → Both happen before any query runs and both carry byte positions, so GraphQL clients see the same kind of positioned error.
 - [Fixed offsets ignore DST in the client's zone] → Clients send their current offset with each request, which is correct for "now". It may be off by an hour only for date boundaries on the far side of a DST change from now, which is acceptable for this change.
 - [Values that used to be syntax errors now parse] → Only on the value side, and only for the listed keywords or braces, so no previously valid filter changes meaning.
-- [Large amounts overflow time arithmetic] → The amount is capped at 10,000,000 at parse time, and `Eval` checks the year range 1–9999 after each step.
+- [Large amounts overflow time arithmetic] → The evaluator caps each amount at 10,000,000 and checks the year range 1–9999 after each step.

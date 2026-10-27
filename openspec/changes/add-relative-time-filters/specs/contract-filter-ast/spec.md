@@ -2,91 +2,50 @@
 
 ## ADDED Requirements
 
-### Requirement: Relative time representation
-A relative time value, bare or in braces, SHALL be represented as a literal of a distinct relative time kind. Its text SHALL be the value's source spelling, braces included. Its position SHALL be the 1-based byte position of the keyword or the `{`. The literal SHALL report whether it evaluates to a date or a timestamp, and SHALL evaluate to a time given a reference time and a first day of the week. Evaluation SHALL use the reference time's time zone and SHALL NOT read the system clock.
+### Requirement: Expression values
+A predicate value that is a bare relative time keyword or a brace expression SHALL be represented as a literal of a distinct expression kind. Its text SHALL be the value's source spelling, braces included, and its position SHALL be the 1-based byte position of the keyword or the `{`. The literal SHALL give access to the root node of the value expression tree. Literals of other kinds SHALL have no expression tree.
 
-#### Scenario: Relative literal kind
+#### Scenario: Brace expression literal
 - **WHEN** a consumer inspects the predicate parsed from `due > {today + 5::days}`
-- **THEN** the value has the relative time kind, text `{today + 5::days}`, position 7, and reports a date
+- **THEN** the value has the expression kind, text `{today + 5::days}`, position 7, and its root is an addition
 
-#### Scenario: Timestamp result
-- **WHEN** a consumer inspects the values parsed from `t > NOW` and `t > {TODAY + 9::HOURS}`
-- **THEN** both report a timestamp
+#### Scenario: Bare keyword literal
+- **WHEN** a consumer inspects the predicate parsed from `due = TODAY`
+- **THEN** the value has the expression kind and its root is the `TODAY` keyword node
 
-#### Scenario: Deterministic evaluation
-- **WHEN** the value of `due = TODAY` is evaluated twice with reference time 2026-10-27T23:30:00-05:00
-- **THEN** both results are the date 2026-10-27
+#### Scenario: Plain literal has no tree
+- **WHEN** a consumer inspects the value parsed from `price > 300`
+- **THEN** the value has the number kind and no expression tree
 
-### Requirement: NOW and TODAY meaning
-Given a reference time `now` in time zone `Z`, `NOW` SHALL evaluate to the instant `now` and `TODAY` to the date of `now` in `Z`. A date SHALL be represented as midnight at the start of that date in `Z`.
+### Requirement: Expression leaf nodes
+An expression tree's leaves SHALL be: a number node with its unsigned source spelling; a keyword node identifying one of the eight relative time keywords, with its source spelling; and a duration node with the amount's decimal digits, the unit, and the unit's position. Every node SHALL be immutable, SHALL report its 1-based byte position, and SHALL be creatable only by the parser.
 
-#### Scenario: Time zone decides the date
-- **WHEN** `TODAY` is evaluated with reference time 2026-10-27T23:30:00Z expressed in UTC+02:00
-- **THEN** the result is 2026-10-28, represented as 2026-10-28T00:00:00+02:00
+#### Scenario: Duration node
+- **WHEN** a consumer inspects the root of `t > {NOW - 30::minutes}`
+- **THEN** it is a `-` node whose right operand is a duration node with amount `30` and unit minutes
 
-### Requirement: Week keyword meaning
-Given a first day of the week `W`, `START_OF_WEEK` SHALL evaluate to the latest date on or before `TODAY` that falls on `W`, and `END_OF_WEEK` to six days after `START_OF_WEEK`.
+#### Scenario: Keyword node
+- **WHEN** a consumer inspects the root of `due = today`
+- **THEN** it is a keyword node identifying `TODAY` with text `today` and position 7
 
-#### Scenario: Week with Monday start
-- **WHEN** `START_OF_WEEK` and `END_OF_WEEK` are evaluated with reference time Tuesday 2026-10-27T10:00:00Z and first day Monday
-- **THEN** the results are 2026-10-26 and 2026-11-01
+### Requirement: Expression operator nodes
+An expression tree's inner nodes SHALL be: a binary node with the operator (`+`, `-`, `*`, or `/`), the operator's position, and left and right operands; and a negation node with the `-` position and its operand.
 
-#### Scenario: Week with Sunday start
-- **WHEN** `START_OF_WEEK` is evaluated with reference time Tuesday 2026-10-27T10:00:00Z and first day Sunday
-- **THEN** the result is 2026-10-25
+#### Scenario: Binary node position
+- **WHEN** a consumer inspects the root of `price > {100 * 3}`
+- **THEN** it is a `*` node at position 14
 
-### Requirement: Month and year keyword meaning
-`START_OF_MONTH` and `END_OF_MONTH` SHALL evaluate to the first and last date of `TODAY`'s month. `START_OF_YEAR` and `END_OF_YEAR` SHALL evaluate to January 1 and December 31 of `TODAY`'s year.
+#### Scenario: Negation node
+- **WHEN** a consumer inspects the root of `delta > {-1.50 * 2}`
+- **THEN** it is a `*` node whose left operand is a negation of the number node `1.50`
 
-#### Scenario: End of February
-- **WHEN** `END_OF_MONTH` is evaluated with reference time 2028-02-10T00:00:00Z
-- **THEN** the result is 2028-02-29
+### Requirement: Tree mirrors the source
+The expression tree SHALL keep the structure and spelling the user wrote. Parentheses SHALL only shape the tree and SHALL NOT appear as nodes. The tree SHALL NOT be simplified, reordered, or evaluated, so `{100 * 3}` stays a multiplication.
 
-#### Scenario: End of year
-- **WHEN** `END_OF_YEAR` is evaluated with reference time 2026-10-27T10:00:00Z
-- **THEN** the result is 2026-12-31
+#### Scenario: No folding
+- **WHEN** a consumer inspects the root of `price > {100 * 3}`
+- **THEN** it is a `*` node with number operands `100` and `3`
 
-### Requirement: Calendar and elapsed durations
-Evaluation SHALL apply operations left to right as written. A duration of several units SHALL be applied one unit amount at a time in the order written, so adding `(a + b)` equals adding `a` and then `b`. `n::DAYS` SHALL move by `n` calendar days in `Z`, keeping the wall-clock time of a timestamp. `n::HOURS` and `n::MINUTES` SHALL move by `n` × 60 or `n` minutes of elapsed time. A result outside the years 1 to 9999 SHALL fail evaluation with an error.
-
-#### Scenario: Calendar days across a DST change
-- **WHEN** `{NOW + 1::DAYS}` is evaluated at 2026-10-24T12:00 in a zone whose clocks go back one hour on 2026-10-25
-- **THEN** the result is 2026-10-25T12:00 in that zone, 25 hours later
-
-#### Scenario: Mixed-unit duration
-- **WHEN** `{NOW + (1::DAYS + 2::HOURS)}` is evaluated at 2026-10-27T10:00:00Z
-- **THEN** the result is 2026-10-28T12:00:00Z
-
-#### Scenario: Date plus hours
-- **WHEN** `{TODAY + 9::HOURS}` is evaluated on 2026-10-27 in UTC+02:00
-- **THEN** the result is the timestamp 2026-10-27T09:00:00+02:00
-
-#### Scenario: Out of range
-- **WHEN** `{TODAY + 10000000::DAYS}` is evaluated in 2026
-- **THEN** evaluation fails with an error
-
-### Requirement: Business day durations
-`n::BUSINESS_DAYS` SHALL move to the `n`th Monday-to-Friday date after the start date for positive `n`, or before it for negative `n`, keeping the wall-clock time of a timestamp. `0::BUSINESS_DAYS` SHALL move a Saturday or Sunday forward to the next Monday and leave a weekday unchanged.
-
-#### Scenario: Business days over a weekend
-- **WHEN** `{TODAY + 3::BUSINESS_DAYS}` is evaluated on Thursday 2026-10-29
-- **THEN** the result is Tuesday 2026-11-03
-
-#### Scenario: Negative business days
-- **WHEN** `{TODAY - 1::BUSINESS_DAYS}` is evaluated on Monday 2026-11-02
-- **THEN** the result is Friday 2026-10-30
-
-#### Scenario: Zero business days on a weekend
-- **WHEN** `{TODAY + 0::BUSINESS_DAYS}` is evaluated on Saturday 2026-10-31
-- **THEN** the result is Monday 2026-11-02
-
-### Requirement: Folded numeric literals
-A brace expression without time keywords or durations SHALL be represented as an ordinary number literal whose text is the exact result in plain decimal notation, with no exponent, no leading `+`, and no trailing fractional zeros, and whose position is that of the `{`.
-
-#### Scenario: Folded value
-- **WHEN** a consumer inspects the predicate parsed from `price > {100 * 3}`
-- **THEN** the value has the number kind, text `300`, and position 9
-
-#### Scenario: Negative result
-- **WHEN** a consumer inspects the value parsed from `delta > {-1.50 * 2}`
-- **THEN** the value has the number kind and text `-3`
+#### Scenario: Parentheses shape the tree
+- **WHEN** a consumer inspects the root of `t > {NOW + (1::DAYS + 2::HOURS)}`
+- **THEN** it is a `+` node whose left operand is `NOW` and whose right operand is a `+` node of the two durations

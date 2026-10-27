@@ -8,7 +8,8 @@ Saved views and dashboards need filters that move with the calendar, such as "cr
 
 - Add relative time keywords as filter values: `NOW`, `TODAY`, `START_OF_WEEK`, `END_OF_WEEK`, `START_OF_MONTH`, `END_OF_MONTH`, `START_OF_YEAR`, `END_OF_YEAR`. They are case-insensitive and recognised only on the value side of a predicate, so fields named `today` or `now` still work unquoted. `NOW` is a timestamp. All the others are dates; for example, `END_OF_MONTH` is the last day of the month.
 - Add arithmetic expressions in braces: `{TODAY + 5::DAYS}`, `{NOW - 90::MINUTES}`, `{TODAY + 2 * 7::DAYS}`, `{100 * 3}`. They support `+`, `-`, `*`, `/`, unary minus, and parentheses. Durations use the units `DAYS`, `BUSINESS_DAYS` (Monday to Friday, no holidays), `HOURS`, and `MINUTES`, and durations of different units can be combined, as in `{NOW + (1::DAYS + 2::HOURS)}`. Arithmetic is allowed only inside braces.
-- Brace expressions without time keywords are calculated when the filter is parsed and become ordinary number literals, so drivers need no change for them.
+- The parser only checks syntax and builds the tree: a bare keyword or brace expression becomes an expression literal holding an expression tree that mirrors the source, unevaluated.
+- The `easylist-core` planner type-checks every expression against its field's type and evaluates it exactly (numbers with `math/big`), using the request's reference time, time zone, and week start. Plans carry the results, so drivers only bind values and never evaluate.
 - Relative values are calculated against a reference time and a time zone. A date value compared with a timestamp field covers the whole day in that time zone, so `created_at <= END_OF_WEEK` includes all of Sunday.
 - Weeks start on Monday by default. An application can change the week start.
 - GraphQL `<P>ListInput` and `<P>ExportInput` gain an optional `timezone: Int`: the client's UTC offset in minutes, positive east of UTC (UTC+02:00 is `120`). When it is omitted, the server's local time zone is used.
@@ -17,9 +18,9 @@ Saved views and dashboards need filters that move with the calendar, such as "cr
 - `BETWEEN` keeps its single-string form and does not accept relative values.
 
 Modules touched:
-- `easylist-filter`: lexer brace mode, grammar, numeric folding, relative time values and their evaluation, AST, and docs.
-- `easylist-core`: reference time and week start on `Request`, `Plan`, and `Runtime`; `AsOf` and `Timezone` on `ExportRequest` and their validation; README.
-- `easylist-sql-goqu`: converting relative time values for date and timestamp fields, including whole-day comparisons; README.
+- `easylist-filter`: lexer brace mode, grammar, the expression literal kind and expression tree nodes, and docs. No evaluation.
+- `easylist-core`: expression type-checking and evaluation in the planner, evaluated values on `Plan`; reference time and week start on `Request` and `Runtime`; `AsOf` and `Timezone` on `ExportRequest` and their validation; README.
+- `easylist-sql-goqu`: binding the plan's evaluated values, including whole-day comparisons for dates on timestamp fields; README.
 - `easylist-gqlgen`: the `timezone` input field in the generated SDL and Go glue, and passing it to core; README.
 - `easylist-export`: running the export at `AsOf` in the request's time zone; README.
 
@@ -29,11 +30,11 @@ Modules touched:
 None.
 
 ### Modified Capabilities
-- `filter-parsing`: relative time keywords, brace expressions, duration units, and their syntax and type errors.
-- `contract-filter-ast`: a relative time literal kind that consumers evaluate against a reference time and week start, and folded numeric literals.
-- `contract-sql-driver`: the plan carries a reference time and week start; relative time literal conversion and whole-day comparison semantics.
+- `filter-parsing`: relative time keywords, brace expressions, duration syntax, and the rule that the parser does syntax only.
+- `contract-filter-ast`: an expression literal kind and the expression tree nodes it exposes.
+- `contract-sql-driver`: the plan carries evaluated expression values; their conversion and whole-day comparison semantics.
 - `sql-goqu-compilation`: how relative values are bound for PostgreSQL.
-- `core-query-planning`: request reference time and week start, and rejecting relative filters without a reference time.
+- `core-query-planning`: request reference time and week start; expression typing, field compatibility, and evaluation (keywords, number arithmetic, durations, business days).
 - `core-list-execution`: the runtime clock and week start, used when a request has no reference time.
 - `contract-export-request`: `AsOf` and `Timezone` fields and their validation.
 - `export-file-generation`: the worker evaluates relative values at `AsOf` in the request's time zone.
@@ -42,9 +43,9 @@ None.
 
 ## Impact
 
-- **Public API (`easylist-filter`)**: a new `LiteralTime` kind and a `Literal.Time()` accessor. Third-party drivers that switch on `LiteralKind` must handle or reject it. Values that used to be syntax errors (`x = today`, `x = {1 + 2}`) now parse.
+- **Public API (`easylist-filter`)**: a new `LiteralExpr` kind, a `Literal.Expr()` accessor, and expression node interfaces. Third-party drivers that switch on `LiteralKind` must handle or reject it. Values that used to be syntax errors (`x = today`, `x = {1 + 2}`) now parse.
 - **Public API (`easylist-core`)**: new fields on `Request`, `Plan`, `Runtime`, and `ExportRequest`. All are optional, so existing callers compile unchanged. Calling `CompiledList.Plan` directly with a relative filter and no `Request.Now` fails.
 - **GraphQL schema**: additive optional input fields. The `Time` scalar is now declared for every list, because `asOf` uses it. Applications must run the gqlgen generator again.
 - **Serialized export jobs**: jobs queued before the upgrade have no `AsOf` and use the worker's clock and local zone.
 - **Generated code**: `grammar.y` changes, so `parser_gen.go` is regenerated.
-- **Dependencies**: none added. Numeric folding uses `math/big`.
+- **Dependencies**: none added. The planner's number arithmetic uses `math/big`.
