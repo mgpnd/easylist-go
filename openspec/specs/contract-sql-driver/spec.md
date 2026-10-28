@@ -36,7 +36,7 @@ A driver SHALL emit list-author SQL (table, alias, field expressions, join text,
 - **THEN** the literal is passed as one bound argument and the SQL text contains only a placeholder for it
 
 ### Requirement: Operators per type
-A driver SHALL accept these operators and reject any other with an error naming the operator, field, and operator position: text `=`, `!=`, `CONTAINS`, `EXCLUDES`; integer, float, numeric, date, timestamp `=`, `!=`, `>`, `>=`, `<`, `<=`, `BETWEEN`; boolean, uuid, enum `=`, `!=`. Every type SHALL also accept `= NULL` and `!= NULL`, whether or not the field is declared nullable.
+A driver SHALL accept these operators and reject any other with an error naming the operator, field, and operator position: text `=`, `!=`, `IN`, `NOT IN`, `CONTAINS`, `EXCLUDES`; integer, float, numeric, date, timestamp `=`, `!=`, `IN`, `NOT IN`, `>`, `>=`, `<`, `<=`, `BETWEEN`; boolean, uuid, enum `=`, `!=`, `IN`, `NOT IN`. Every type SHALL also accept `= NULL` and `!= NULL`, whether or not the field is declared nullable.
 
 #### Scenario: Unsupported operator
 - **WHEN** a filter is `active > TRUE` for boolean field `active`
@@ -61,6 +61,10 @@ A driver SHALL accept these operators and reject any other with an error naming 
 #### Scenario: NULL comparison on a non-nullable field
 - **WHEN** a filter is `name = NULL` for text field `name`, which is not declared nullable
 - **THEN** compilation succeeds and the filter matches only rows where `name` is NULL
+
+#### Scenario: IN on every scalar type
+- **WHEN** a filter is `active IN (TRUE)` for boolean field `active`, or `id NOT IN ('7f1c0d2e-0000-4000-8000-000000000000')` for uuid field `id`
+- **THEN** compilation succeeds
 
 ### Requirement: Literal conversion per type
 A driver SHALL convert each filter literal to its field's type and reject mismatches with an error at the literal's position: text, uuid, enum, date, timestamp need a string; integer, float, numeric need a number; boolean needs `TRUE` or `FALSE`. Integers SHALL fit 64 bits, floats SHALL be finite, numerics SHALL keep exact digits, dates SHALL be `YYYY-MM-DD`, timestamps SHALL be RFC 3339 with an offset, uuids SHALL be canonical hyphenated hex, and enums SHALL be a declared value.
@@ -89,11 +93,15 @@ For an expression literal the driver SHALL use the plan's evaluated result inste
 - **THEN** compilation fails at the literal's position because `2.5` is not an integer
 
 ### Requirement: NULL literals
-A NULL literal SHALL be valid for every type and SHALL NOT be converted or bound as an argument.
+A NULL literal SHALL be valid for every type and SHALL NOT be converted or bound as an argument. This SHALL hold for a NULL item of an `IN` or `NOT IN` list.
 
 #### Scenario: NULL literal binds nothing
 - **WHEN** a filter is `status = NULL` for enum field `status`
 - **THEN** compilation succeeds without checking declared values, and the query has no argument for the NULL literal
+
+#### Scenario: NULL item binds nothing
+- **WHEN** a filter is `status IN ('active', NULL)` for enum field `status`
+- **THEN** compilation succeeds, and the query has an argument for `active` and none for the NULL item
 
 ### Requirement: Scope combination
 When the plan has a scope, the driver SHALL combine it with the filter so that rows must satisfy both, regardless of `OR` connectors inside the filter.
@@ -140,11 +148,19 @@ Text `EXCLUDES 'a'` SHALL match rows whose field does not contain `a` under the 
 - **THEN** only the row with `country` equal to `FR` matches
 
 ### Requirement: BETWEEN semantics
-`BETWEEN 'a,b'` SHALL match values from `a` to `b` inclusive, after trimming spaces around each bound and converting both to the field's type.
+`BETWEEN 'a,b'` SHALL match values from `a` to `b` inclusive, after trimming spaces around each bound and converting both to the field's type. `BETWEEN (a, b)` SHALL match the same range, with each bound converted as a list item and not trimmed.
 
 #### Scenario: Timestamp range
 - **WHEN** a filter is `created_at BETWEEN '2026-01-01T00:00:00Z, 2026-02-01T00:00:00Z'`
 - **THEN** rows with `created_at` in that inclusive range match
+
+#### Scenario: List bounds
+- **WHEN** a filter is `age BETWEEN (30, 40)` for integer field `age`
+- **THEN** it matches the same rows as `age BETWEEN '30,40'`
+
+#### Scenario: Date list bounds
+- **WHEN** a filter is `due BETWEEN ('2026-01-01', '2026-02-01')` for date field `due`
+- **THEN** rows with `due` from 2026-01-01 to 2026-02-01 inclusive match
 
 ### Requirement: Logical grouping
 `AND` and `OR` SHALL keep the grouping of the syntax tree.
@@ -183,8 +199,12 @@ A driver SHALL accept only `CONTAINS`, `EXCLUDES`, `= NULL`, and `!= NULL` on ar
 - **WHEN** a filter is `tags = NULL` for nullable text array field `tags`
 - **THEN** compilation succeeds and only rows whose `tags` is NULL match, not rows holding an empty array
 
+#### Scenario: IN on an array
+- **WHEN** a filter is `tags IN ('go')` for text array field `tags`
+- **THEN** compilation fails with an error naming `IN`, `tags`, and position 6
+
 ### Requirement: Array value lists
-For array fields, a string literal SHALL be a comma-separated list of one or more values. Each item SHALL be trimmed and converted to the element type under the scalar literal rules, and an empty item SHALL be an error. An unquoted number or boolean SHALL be a single value. Errors SHALL report the literal's position.
+For array fields, a string literal SHALL be a comma-separated list of one or more values. Each item SHALL be trimmed and converted to the element type under the scalar literal rules, and an empty item SHALL be an error. An unquoted number or boolean SHALL be a single value. Errors SHALL report the literal's position. A list value SHALL give one value per item, never split or trimmed.
 
 #### Scenario: Quoted list on an integer array
 - **WHEN** a filter is `ids CONTAINS '7, 8'` for integer array field `ids`
@@ -213,6 +233,14 @@ For array fields, a string literal SHALL be a comma-separated list of one or mor
 #### Scenario: Text fields do not split lists
 - **WHEN** a filter is `name CONTAINS 'a,b'` for scalar text field `name`
 - **THEN** rows match when `name` contains the substring `a,b`
+
+#### Scenario: List value keeps commas
+- **WHEN** a filter is `tags CONTAINS ('a,b', ' c')` for text array field `tags`
+- **THEN** the values are `a,b` and ` c`
+
+#### Scenario: List value matches like the quoted form
+- **WHEN** a filter is `statuses CONTAINS ('ok', 'passed')` for text array field `statuses`
+- **THEN** it matches the same rows as `statuses CONTAINS 'ok,passed'`
 
 ### Requirement: Array CONTAINS semantics
 `CONTAINS` on an array field SHALL match rows whose array has, for every listed value, an element equal to it. Equality SHALL be exact for every element type, including case-sensitive text. A NULL array SHALL NOT match.
@@ -261,3 +289,54 @@ A date result `D` compared with a timestamp field SHALL cover the whole day `D` 
 #### Scenario: Not equal to a day matches NULL
 - **WHEN** a filter is `created_at != TODAY` and a row has `created_at` NULL
 - **THEN** that row matches
+### Requirement: IN semantics
+`IN` SHALL match exactly the rows that `=` would match for at least one item of its list. A NULL item SHALL match rows whose field is NULL, as `= NULL` does. Duplicate items SHALL NOT change the result.
+
+#### Scenario: Any listed value
+- **WHEN** a filter is `status IN ('success', 'pending')` and rows have `status` equal to `success`, `pending`, `error`, and NULL
+- **THEN** only the `success` and `pending` rows match
+
+#### Scenario: NULL item
+- **WHEN** a filter is `status IN ('success', NULL)` and rows have `status` equal to `success`, `error`, and NULL
+- **THEN** the `success` and NULL rows match
+
+#### Scenario: Only a NULL item
+- **WHEN** a filter is `status IN (NULL)`
+- **THEN** it matches the same rows as `status = NULL`
+
+### Requirement: NOT IN semantics
+`NOT IN` SHALL match exactly the rows that `!=` would match for every item of its list, so it matches the rows that `IN` with the same list does not. Rows whose field is NULL SHALL match unless the list contains a NULL item.
+
+#### Scenario: NULL field matches
+- **WHEN** a filter is `status NOT IN ('error')` and rows have `status` equal to `success`, `error`, and NULL
+- **THEN** the `success` and NULL rows match
+
+#### Scenario: NULL item leaves out NULL rows
+- **WHEN** a filter is `status NOT IN ('error', NULL)` and rows have `status` equal to `success`, `error`, and NULL
+- **THEN** only the `success` row matches
+
+#### Scenario: Only a NULL item
+- **WHEN** a filter is `status NOT IN (NULL)`
+- **THEN** it matches the same rows as `status != NULL`
+
+### Requirement: List item conversion
+A driver SHALL convert each non-NULL item of a list value separately, under the literal conversion rules for the field's type or, on an array field, its element type, and SHALL reject a mismatch with an error at the item's position. An item SHALL keep the kind it was written as, so a quoted number is a string.
+
+#### Scenario: Undeclared enum item
+- **WHEN** a filter is `status IN ('active', 'archived')` and `status` declares only `active` and `blocked`
+- **THEN** compilation fails with an error naming `archived` at position 22
+
+#### Scenario: Quoted number item
+- **WHEN** a filter is `age BETWEEN ('30', '40')` for integer field `age`
+- **THEN** compilation fails at position 14 because the bound is a string
+
+#### Scenario: Invalid array item
+- **WHEN** a filter is `ids CONTAINS (7, 'x')` for integer array field `ids`
+- **THEN** compilation fails at position 18
+
+### Requirement: No lists on scalar text CONTAINS and EXCLUDES
+A driver SHALL reject a list value for `CONTAINS` or `EXCLUDES` on a scalar text field with an error naming the field at the list's position.
+
+#### Scenario: List on a text field
+- **WHEN** a filter is `name CONTAINS ('a', 'b')` for scalar text field `name`
+- **THEN** compilation fails with an error naming `name` at position 15
