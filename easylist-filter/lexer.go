@@ -33,6 +33,9 @@ const (
 	tokStar   // '*'
 	tokSlash  // '/'
 	tokDColon // '::'
+	tokComma  // ','
+	tokIn
+	tokNot
 
 	numTokenKinds
 )
@@ -47,7 +50,7 @@ type token struct {
 var keywords = map[string]tokenKind{
 	"TRUE": tokBool, "FALSE": tokBool,
 	"CONTAINS": tokContains, "EXCLUDES": tokExcludes, "BETWEEN": tokBetween,
-	"AND": tokAnd, "OR": tokOr, "NULL": tokNull,
+	"AND": tokAnd, "OR": tokOr, "NULL": tokNull, "IN": tokIn, "NOT": tokNot,
 }
 
 // lexer scans filter syntax without interpreting predicates or value types.
@@ -56,8 +59,9 @@ var keywords = map[string]tokenKind{
 // A '{' switches it into brace mode until the next '}'. In brace mode,
 // + and - are operator tokens, numbers are unsigned, and every word is an
 // identifier, never a keyword such as AND. Outside braces, + and - start a
-// signed number. '*', '/', and '::' are tokens in both modes, so that the
-// parser, not the lexer, rejects them outside braces at their own position.
+// signed number. '*', '/', '::', and ',' are tokens in both modes, so that the
+// parser, not the lexer, rejects them where they do not belong at their own
+// position.
 type lexer struct {
 	src   string
 	i     int  // next byte to read
@@ -118,6 +122,8 @@ func (l *lexer) scanToken() (token, error) {
 			return token{}, fmt.Errorf("expected ':' after ':' at position %d", start+1)
 		}
 		kind = tokDColon
+	case ',':
+		kind = tokComma
 	case '=':
 		kind = tokEq
 	case '(':

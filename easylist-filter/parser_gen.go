@@ -14,6 +14,7 @@ type yySymType struct {
 	expr Expr
 	op   opAt
 	lit  Literal
+	lits []Literal
 	node ExprNode
 }
 
@@ -31,6 +32,8 @@ const tAND = 57356
 const tOR = 57357
 const tNULL = 57358
 const tDCOLON = 57359
+const tIN = 57360
+const tNOT = 57361
 
 var yyToknames = [...]string{
 	"$end",
@@ -50,6 +53,8 @@ var yyToknames = [...]string{
 	"tOR",
 	"tNULL",
 	"tDCOLON",
+	"tIN",
+	"tNOT",
 	"'='",
 	"'>'",
 	"'<'",
@@ -61,6 +66,7 @@ var yyToknames = [...]string{
 	"'-'",
 	"'*'",
 	"'/'",
+	"','",
 }
 
 var yyStatenames = [...]string{}
@@ -69,7 +75,7 @@ const yyEofCode = 1
 const yyErrCode = 2
 const yyInitialStackSize = 16
 
-//line grammar.y:99
+//line grammar.y:132
 
 //line yacctab:1
 var yyExca = [...]int8{
@@ -80,62 +86,78 @@ var yyExca = [...]int8{
 
 const yyPrivate = 57344
 
-const yyLast = 63
+const yyLast = 95
 
 var yyAct = [...]int8{
-	38, 36, 47, 48, 37, 42, 57, 41, 50, 45,
-	46, 44, 45, 46, 15, 17, 19, 20, 21, 13,
-	7, 35, 43, 34, 14, 16, 18, 39, 27, 29,
-	30, 31, 8, 8, 9, 33, 4, 6, 56, 24,
-	49, 26, 29, 30, 31, 51, 23, 28, 54, 55,
-	52, 53, 3, 2, 32, 1, 40, 25, 12, 11,
-	10, 22, 5,
+	58, 57, 47, 45, 42, 71, 46, 72, 69, 64,
+	65, 83, 28, 34, 73, 70, 15, 19, 21, 22,
+	23, 13, 51, 43, 50, 41, 16, 17, 14, 18,
+	20, 79, 37, 44, 62, 63, 8, 54, 7, 67,
+	55, 52, 61, 62, 63, 26, 48, 40, 8, 60,
+	39, 66, 29, 31, 32, 33, 68, 6, 31, 32,
+	33, 9, 1, 31, 32, 33, 78, 76, 77, 74,
+	75, 80, 81, 30, 59, 82, 36, 4, 31, 32,
+	33, 3, 2, 49, 53, 56, 38, 25, 35, 10,
+	24, 27, 12, 11, 5,
 }
 
 var yyPact = [...]int16{
-	16, -32768, 18, 20, -32768, -32768, 16, 6, 16, 16,
-	17, 24, 37, 30, 7, 5, -32768, -32768, -32768, -32768,
-	-32768, -32768, 20, -32768, -32768, -32768, -32768, -32768, 1, -32768,
-	-32768, -32768, -32768, -32768, -32768, -32768, -13, -25, -32768, 1,
-	-32768, -9, -32768, 1, -32768, 1, 1, 1, 1, -32768,
-	34, -16, -25, -25, -32768, -32768, -32768, -32768,
+	34, -32768, 33, 47, -32768, -32768, 34, 8, 34, 34,
+	21, 48, 53, 27, 31, 9, 0, 15, -32768, -32768,
+	-32768, -32768, -32768, -32768, 47, -32768, -32768, -32768, -32768, -32768,
+	18, -32768, -32768, -32768, -32768, -32768, 73, -32768, -32768, 73,
+	-32768, -32768, -32768, 58, 0, 16, -20, -32768, 18, -32768,
+	22, -32768, 18, -16, -32768, -26, -17, -32768, -32768, -32768,
+	-32768, -32768, 18, 18, 18, 18, -32768, 62, 7, -32768,
+	73, 73, -32768, 58, -20, -20, -32768, -32768, -32768, -32768,
+	-32768, -13, -32768, -32768,
 }
 
 var yyPgo = [...]int8{
-	0, 53, 52, 36, 62, 59, 58, 41, 57, 1,
-	4, 0, 56, 55,
+	0, 82, 81, 77, 94, 93, 92, 0, 91, 1,
+	4, 88, 86, 85, 84, 3, 6, 2, 83, 62,
 }
 
 var yyR1 = [...]int8{
-	0, 13, 1, 1, 2, 2, 3, 3, 4, 4,
-	4, 4, 4, 5, 5, 5, 5, 5, 5, 6,
-	6, 7, 7, 7, 8, 8, 8, 9, 9, 9,
-	10, 10, 10, 11, 11, 12, 12, 12, 12,
+	0, 19, 1, 1, 2, 2, 3, 3, 4, 4,
+	4, 4, 4, 4, 4, 4, 4, 5, 5, 5,
+	5, 5, 5, 6, 6, 7, 7, 7, 10, 13,
+	13, 9, 9, 11, 14, 14, 12, 8, 8, 8,
+	15, 15, 15, 16, 16, 16, 17, 17, 18, 18,
+	18, 18,
 }
 
 var yyR2 = [...]int8{
 	0, 1, 1, 3, 1, 3, 1, 3, 3, 3,
-	3, 3, 3, 1, 1, 1, 1, 1, 1, 1,
-	1, 1, 1, 1, 1, 1, 3, 1, 3, 3,
-	1, 3, 3, 2, 1, 1, 3, 1, 3,
+	3, 3, 3, 3, 4, 3, 3, 1, 1, 1,
+	1, 1, 1, 1, 1, 1, 1, 1, 3, 1,
+	3, 1, 1, 3, 1, 3, 5, 1, 1, 3,
+	1, 3, 3, 1, 3, 3, 2, 1, 1, 3,
+	1, 3,
 }
 
 var yyChk = [...]int16{
-	-32768, -13, -1, -2, -3, -4, 21, 4, 15, 14,
-	-1, -5, -6, 13, 18, 8, 19, 9, 20, 10,
-	11, 12, -2, -3, 22, -8, -7, 4, 23, 5,
-	6, 7, -7, 5, 16, 16, -9, -10, -11, 26,
-	-12, 6, 4, 21, 24, 25, 26, 27, 28, -11,
-	17, -9, -10, -10, -11, -11, 4, 22,
+	-32768, -19, -1, -2, -3, -4, 23, 4, 15, 14,
+	-1, -5, -6, 13, 20, 8, 18, 19, 21, 9,
+	22, 10, 11, 12, -2, -3, 24, -8, -7, 4,
+	25, 5, 6, 7, -7, -11, 23, 5, -12, 23,
+	16, 16, -10, 23, 18, -15, -16, -17, 28, -18,
+	6, 4, 23, -14, -7, -7, -13, -9, -7, 16,
+	-10, 26, 27, 28, 29, 30, -17, 17, -15, 24,
+	31, 31, 24, 31, -16, -16, -17, -17, 4, 24,
+	-7, -7, -9, 24,
 }
 
 var yyDef = [...]int8{
 	0, -2, 1, 2, 4, 6, 0, 0, 0, 0,
-	0, 0, 0, 0, 13, 14, 15, 16, 17, 18,
-	19, 20, 3, 5, 7, 8, 24, 25, 0, 21,
-	22, 23, 9, 10, 11, 12, 0, 27, 30, 0,
-	34, 35, 37, 0, 26, 0, 0, 0, 0, 33,
-	0, 0, 28, 29, 31, 32, 36, 38,
+	0, 0, 0, 0, 17, 18, 0, 0, 19, 20,
+	21, 22, 23, 24, 3, 5, 7, 8, 37, 38,
+	0, 25, 26, 27, 9, 15, 0, 10, 16, 0,
+	11, 12, 13, 0, 0, 0, 40, 43, 0, 47,
+	48, 50, 0, 0, 34, 0, 0, 29, 31, 32,
+	14, 39, 0, 0, 0, 0, 46, 0, 0, 33,
+	0, 0, 28, 0, 41, 42, 44, 45, 49, 51,
+	35, 0, 30, 36,
 }
 
 var yyTok1 = [...]int8{
@@ -143,20 +165,20 @@ var yyTok1 = [...]int8{
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-	21, 22, 27, 25, 3, 26, 3, 28, 3, 3,
+	23, 24, 29, 27, 31, 28, 3, 30, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-	20, 18, 19, 3, 3, 3, 3, 3, 3, 3,
-	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+	22, 20, 21, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
 	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-	3, 3, 3, 23, 3, 24,
+	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+	3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+	3, 3, 3, 25, 3, 26,
 }
 
 var yyTok2 = [...]int8{
 	2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-	12, 13, 14, 15, 16, 17,
+	12, 13, 14, 15, 16, 17, 18, 19,
 }
 
 var yyTok3 = [...]int8{
@@ -502,189 +524,261 @@ yydefault:
 
 	case 1:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:23
+//line grammar.y:25
 		{
 			yylex.(*parseState).result = yyDollar[1].expr
 		}
 	case 3:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:28
+//line grammar.y:30
 		{
 			yyVAL.expr = &logicalNode{operator: Or, operatorPos: yyDollar[2].tok.pos, left: yyDollar[1].expr, right: yyDollar[3].expr}
 		}
 	case 5:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:33
+//line grammar.y:35
 		{
 			yyVAL.expr = &logicalNode{operator: And, operatorPos: yyDollar[2].tok.pos, left: yyDollar[1].expr, right: yyDollar[3].expr}
 		}
 	case 7:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:38
+//line grammar.y:40
 		{
 			yyVAL.expr = yyDollar[2].expr
 		}
 	case 8:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:42
+//line grammar.y:44
 		{
 			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: yyDollar[2].op.op, operatorPos: yyDollar[2].op.pos, value: yyDollar[3].lit}
 		}
 	case 9:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:43
+//line grammar.y:45
 		{
 			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: yyDollar[2].op.op, operatorPos: yyDollar[2].op.pos, value: yyDollar[3].lit}
 		}
 	case 10:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:44
+//line grammar.y:46
 		{
 			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpBetween, operatorPos: yyDollar[2].tok.pos, value: Literal{kind: LiteralString, text: yyDollar[3].tok.text, pos: yyDollar[3].tok.pos}}
 		}
 	case 11:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:45
+//line grammar.y:47
 		{
 			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpEq, operatorPos: yyDollar[2].tok.pos, value: Literal{kind: LiteralNull, text: yyDollar[3].tok.text, pos: yyDollar[3].tok.pos}}
 		}
 	case 12:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:46
+//line grammar.y:48
 		{
 			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpNeq, operatorPos: yyDollar[2].tok.pos, value: Literal{kind: LiteralNull, text: yyDollar[3].tok.text, pos: yyDollar[3].tok.pos}}
 		}
 	case 13:
-		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:50
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:49
 		{
-			yyVAL.op = opAt{OpEq, yyDollar[1].tok.pos}
+			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpIn, operatorPos: yyDollar[2].tok.pos, value: yyDollar[3].lit}
 		}
 	case 14:
-		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:51
+		yyDollar = yyS[yypt-4 : yypt+1]
+//line grammar.y:50
 		{
-			yyVAL.op = opAt{OpNeq, yyDollar[1].tok.pos}
+			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpNotIn, operatorPos: yyDollar[2].tok.pos, value: yyDollar[4].lit}
 		}
 	case 15:
-		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:52
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:51
 		{
-			yyVAL.op = opAt{OpGt, yyDollar[1].tok.pos}
+			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: yyDollar[2].op.op, operatorPos: yyDollar[2].op.pos, value: yyDollar[3].lit}
 		}
 	case 16:
-		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:53
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:52
 		{
-			yyVAL.op = opAt{OpGte, yyDollar[1].tok.pos}
+			yyVAL.expr = &predicateNode{field: yyDollar[1].tok, operator: OpBetween, operatorPos: yyDollar[2].tok.pos, value: yyDollar[3].lit}
 		}
 	case 17:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:54
+//line grammar.y:56
 		{
-			yyVAL.op = opAt{OpLt, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpEq, yyDollar[1].tok.pos}
 		}
 	case 18:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:55
+//line grammar.y:57
 		{
-			yyVAL.op = opAt{OpLte, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpNeq, yyDollar[1].tok.pos}
 		}
 	case 19:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:59
+//line grammar.y:58
 		{
-			yyVAL.op = opAt{OpContains, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpGt, yyDollar[1].tok.pos}
 		}
 	case 20:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:60
+//line grammar.y:59
 		{
-			yyVAL.op = opAt{OpExcludes, yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpGte, yyDollar[1].tok.pos}
 		}
 	case 21:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:64
+//line grammar.y:60
 		{
-			yyVAL.lit = Literal{kind: LiteralString, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpLt, yyDollar[1].tok.pos}
 		}
 	case 22:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:65
+//line grammar.y:61
 		{
-			yyVAL.lit = Literal{kind: LiteralNumber, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpLte, yyDollar[1].tok.pos}
 		}
 	case 23:
 		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:65
+		{
+			yyVAL.op = opAt{OpContains, yyDollar[1].tok.pos}
+		}
+	case 24:
+		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:66
 		{
-			yyVAL.lit = Literal{kind: LiteralBool, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+			yyVAL.op = opAt{OpExcludes, yyDollar[1].tok.pos}
 		}
 	case 25:
 		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:70
+		{
+			yyVAL.lit = Literal{kind: LiteralString, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+		}
+	case 26:
+		yyDollar = yyS[yypt-1 : yypt+1]
 //line grammar.y:71
+		{
+			yyVAL.lit = Literal{kind: LiteralNumber, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+		}
+	case 27:
+		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:72
+		{
+			yyVAL.lit = Literal{kind: LiteralBool, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+		}
+	case 28:
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:76
+		{
+			yyVAL.lit = yylex.(*parseState).list(yyDollar[1].tok, yyDollar[2].lits, yyDollar[3].tok)
+		}
+	case 29:
+		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:80
+		{
+			yyVAL.lits = []Literal{yyDollar[1].lit}
+		}
+	case 30:
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:81
+		{
+			yyVAL.lits = append(yyDollar[1].lits, yyDollar[3].lit)
+		}
+	case 32:
+		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:86
+		{
+			yyVAL.lit = Literal{kind: LiteralNull, text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
+		}
+	case 33:
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:90
+		{
+			yyVAL.lit = yylex.(*parseState).list(yyDollar[1].tok, yyDollar[2].lits, yyDollar[3].tok)
+		}
+	case 34:
+		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:94
+		{
+			yyVAL.lits = []Literal{yyDollar[1].lit}
+		}
+	case 35:
+		yyDollar = yyS[yypt-3 : yypt+1]
+//line grammar.y:95
+		{
+			yyVAL.lits = append(yyDollar[1].lits, yyDollar[3].lit)
+		}
+	case 36:
+		yyDollar = yyS[yypt-5 : yypt+1]
+//line grammar.y:99
+		{
+			yyVAL.lit = yylex.(*parseState).list(yyDollar[1].tok, []Literal{yyDollar[2].lit, yyDollar[4].lit}, yyDollar[5].tok)
+		}
+	case 38:
+		yyDollar = yyS[yypt-1 : yypt+1]
+//line grammar.y:104
 		{
 			s := yylex.(*parseState)
 			yyVAL.lit = Literal{kind: LiteralExpr, text: s.spelling(yyDollar[1].tok), pos: yyDollar[1].tok.pos, expr: s.keyword(yyDollar[1].tok)}
 		}
-	case 26:
+	case 39:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:72
+//line grammar.y:105
 		{
 			s := yylex.(*parseState)
 			yyVAL.lit = Literal{kind: LiteralExpr, text: s.src[yyDollar[1].tok.pos-1 : yyDollar[3].tok.pos], pos: yyDollar[1].tok.pos, expr: yyDollar[2].node}
 		}
-	case 28:
+	case 41:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:77
+//line grammar.y:110
 		{
 			yyVAL.node = &binaryNode{operator: ArithAdd, pos: yyDollar[2].tok.pos, left: yyDollar[1].node, right: yyDollar[3].node}
 		}
-	case 29:
+	case 42:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:78
+//line grammar.y:111
 		{
 			yyVAL.node = &binaryNode{operator: ArithSub, pos: yyDollar[2].tok.pos, left: yyDollar[1].node, right: yyDollar[3].node}
 		}
-	case 31:
+	case 44:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:83
+//line grammar.y:116
 		{
 			yyVAL.node = &binaryNode{operator: ArithMul, pos: yyDollar[2].tok.pos, left: yyDollar[1].node, right: yyDollar[3].node}
 		}
-	case 32:
+	case 45:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:84
+//line grammar.y:117
 		{
 			yyVAL.node = &binaryNode{operator: ArithDiv, pos: yyDollar[2].tok.pos, left: yyDollar[1].node, right: yyDollar[3].node}
 		}
-	case 33:
+	case 46:
 		yyDollar = yyS[yypt-2 : yypt+1]
-//line grammar.y:88
+//line grammar.y:121
 		{
 			yyVAL.node = &negationNode{pos: yyDollar[1].tok.pos, operand: yyDollar[2].node}
 		}
-	case 35:
+	case 48:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:93
+//line grammar.y:126
 		{
 			yyVAL.node = &numberNode{text: yyDollar[1].tok.text, pos: yyDollar[1].tok.pos}
 		}
-	case 36:
+	case 49:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:94
+//line grammar.y:127
 		{
 			yyVAL.node = yylex.(*parseState).duration(yyDollar[1].tok, yyDollar[3].tok)
 		}
-	case 37:
+	case 50:
 		yyDollar = yyS[yypt-1 : yypt+1]
-//line grammar.y:95
+//line grammar.y:128
 		{
 			yyVAL.node = yylex.(*parseState).keyword(yyDollar[1].tok)
 		}
-	case 38:
+	case 51:
 		yyDollar = yyS[yypt-3 : yypt+1]
-//line grammar.y:96
+//line grammar.y:129
 		{
 			yyVAL.node = yyDollar[2].node
 		}

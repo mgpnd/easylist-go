@@ -44,7 +44,7 @@ on the first byte:
 | `'` or `"`              | `scanQuoted`     | `tokString` (`'…'`) or quoted `tokIdent` (`"…"`) |
 | letter, `_`, byte ≥ 128 | `scanIdentifier` | a keyword token or `tokIdent`              |
 | digit; `+`, `-` outside braces | `scanNumber` | `tokNumber`                             |
-| `= ( ) > < ! { } * / :`; `+ -` inside braces | inline in `scanToken` | operator, paren, and brace tokens |
+| `= ( ) > < ! { } * / : ,`; `+ -` inside braces | inline in `scanToken` | operator, paren, comma, and brace tokens |
 
 Each token records its kind, its text, and the 1-based byte position of its
 first byte. A few rules worth knowing:
@@ -70,9 +70,10 @@ first byte. A few rules worth knowing:
   it is set, `+` and `-` are `tokPlus` and `tokMinus` instead of the start of
   a signed number, and `scanIdentifier` skips the `keywords` map, so every
   word, even `AND` or `TRUE`, is a `tokIdent`. A `{` while the flag is set is
-  the error `nested '{'`. `*`, `/`, and `::` (`tokStar`, `tokSlash`,
-  `tokDColon`) are tokens in both modes, so that outside braces the parser
-  reports them at their own position; a lone `:` is an error. Outside braces
+  the error `nested '{'`. `*`, `/`, `::`, and `,` (`tokStar`, `tokSlash`,
+  `tokDColon`, `tokComma`) are tokens in both modes, so that the parser
+  reports them at their own position wherever they do not belong, such as
+  `*` outside braces or `,` inside them; a lone `:` is an error. Outside braces
   nothing else changes, so `age > -3` still lexes `-3` as one number. The
   relative time keywords and units are never lexer keywords: the grammar
   recognises them from `tokIdent`.
@@ -154,7 +155,7 @@ returns its inner expression, so `(a = 1 OR b = 2) AND c = 3` is just an
 
 ### Predicates
 
-The five `predicate` rules build a `predicateNode`:
+The nine `predicate` rules build a `predicateNode`:
 
 - `tIDENT comparison_op comparison_value` covers `=`, `!=`, `>`, `>=`, `<`,
   and `<=`, and `tIDENT set_op plain_value` covers `CONTAINS` and
@@ -170,6 +171,37 @@ The five `predicate` rules build a `predicateNode`:
   spelling as its text and the keyword's position. `tNULL` is not a `value`
   alternative, so the grammar itself rejects `NULL` after any other operator
   and as a field name.
+- `tIDENT tIN in_list` and `tIDENT tNOT tIN in_list` build an `OpIn` or
+  `OpNotIn` predicate. For `NOT IN` the operator position is the `tNOT`'s.
+  `tNOT` appears in no other rule, so `NOT` anywhere but before `IN` is a
+  syntax error at the token after it, or at the `NOT` itself.
+- `tIDENT set_op value_list` and `tIDENT tBETWEEN range` are the list forms
+  of `CONTAINS`/`EXCLUDES` and `BETWEEN`, beside their `plain_value` and
+  `tSTRING` forms.
+
+Three list rules build a `LiteralList` literal through `parseState.list`,
+whose text is the input from the `(` to the `)` and whose position is the
+`(`'s:
+
+```
+in_list     : '(' in_items ')' ;
+in_items    : in_item | in_items ',' in_item ;
+in_item     : plain_value | tNULL ;
+value_list  : '(' plain_items ')' ;
+plain_items : plain_value | plain_items ',' plain_value ;
+range       : '(' plain_value ',' plain_value ')' ;
+```
+
+Each item is the `Literal` its `plain_value` or `tNULL` builds, with its own
+text and position. Because only `in_item` accepts `tNULL`, and `range` has
+exactly two `plain_value`s, the grammar itself rejects a `NULL` in a
+`CONTAINS`, `EXCLUDES`, or `BETWEEN` list and a `BETWEEN` list of the wrong
+size, at the offending token. None of the list rules accepts a time keyword
+or `'{'`, so relative values in lists are syntax errors too. A list's `(`
+only ever follows an operator, and a grouping `(` only starts a `primary`,
+so goyacc reports no conflicts. List parentheses go through the same
+`open` bookkeeping as grouping ones, so `status IN ('a'` reports
+`unmatched '(' at position 11`.
 
 The resulting `predicateNode` keeps the field token (name, quoted flag,
 position), the operator and its position, and a `Literal` with the decoded
@@ -239,16 +271,19 @@ The rewording uses the `tokenDisplay` map, which turns generated token names
 into user-facing ones: `$end` becomes "end of input", and `tSTRING`,
 `tNUMBER` and `tBOOL` become "string", "number" and "boolean". `tNEQ`,
 `tGTE`, `tLTE` and `tDCOLON` print as `'!='`, `'>='`, `'<='` and `'::'`, and
-the keyword tokens print as their keyword, such as `AND`, `OR`, and `NULL`.
-Quoted character tokens like `'('` and `'{'` are not in the map and print as
-they are. A list of expected tokens reads "expected a, b, or c".
+the keyword tokens print as their keyword, such as `AND`, `OR`, `IN`,
+`NOT`, and `NULL`. Quoted character tokens like `'('`, `','`, and `'{'` are
+not in the map and print as they are. A list of expected tokens reads "expected a, b, or c".
 
 `tIDENT` is named by where the parser stopped, which `errorContext` works out
 from the tokens before the lookahead: "unit" right after `::` inside braces,
 "time keyword" elsewhere inside braces, "identifier" right after a predicate
-operator, and "field" everywhere else. So `due > {}` reports "unexpected '}',
-expected time keyword, number, '(', or '-'", and `name CONTAINS TODAY`
-reports "unexpected identifier, expected string, number, or boolean".
+operator or `NOT`, or where a list item belongs (after a `,`, or after a `(`
+that follows `IN`, `CONTAINS`, `EXCLUDES`, or `BETWEEN`), and "field"
+everywhere else. So `due > {}` reports "unexpected '}', expected time
+keyword, number, '(', or '-'", `name CONTAINS TODAY` reports "unexpected
+identifier, expected string, number, boolean, or '('", and `due IN (TODAY)`
+reports "unexpected identifier, expected string, number, boolean, or NULL".
 
 goyacc's default reductions can leave `tAND` out of an expected list that
 contains `tOR`: after `(a = 1`, the parser reduces to an `or_expr` before it
@@ -288,7 +323,7 @@ of `TestParseErrorMessages` and must be updated together with them.
 | *(empty)*             | `unexpected end of input, expected field or '(' at position 1` |
 | `a 1`                 | `unexpected number at position 3`           |
 | `a =`                 | `unexpected end of input, expected string, number, boolean, NULL, time keyword, or '{' at position 4` |
-| `a BETWEEN 1`         | `unexpected number, expected string at position 11` |
+| `a BETWEEN 1`         | `unexpected number, expected string or '(' at position 11` |
 | `(a = 1 OR)`          | `unexpected ')', expected field or '(' at position 10` |
 | `a = 1 b = 2`         | `unexpected field at position 7`            |
 | `a = 1)`              | `unmatched ')' at position 6`               |
@@ -297,6 +332,9 @@ of `TestParseErrorMessages` and must be updated together with them.
 | `a = 'x`              | `unterminated quote at position 5` (lexer)  |
 | `1abc = 1`            | `invalid number at position 2` (lexer)      |
 | `a = 1 @`             | `unexpected character '@' at position 7` (lexer) |
+| `status IN ()`        | `unexpected ')', expected string, number, boolean, or NULL at position 12` |
+| `age BETWEEN (30)`    | `unexpected ')', expected ',' at position 16` |
+| `status IN ('a'`      | `unmatched '(' at position 11`              |
 
 ## Extending the parser
 

@@ -62,6 +62,24 @@ func TestLexFilterTokens(t *testing.T) {
 			{kind: tokNull, text: "NULL", pos: 1}, {kind: tokNull, text: "null", pos: 6}, {kind: tokNull, text: "Null", pos: 11},
 			{kind: tokIdent, text: "NULL", pos: 16, quoted: true}, {kind: tokIdent, text: "nullable", pos: 23},
 		}},
+		{"comma", `x IN ('a',1 , TRUE)`, []token{
+			{kind: tokIdent, text: "x", pos: 1}, {kind: tokIn, text: "IN", pos: 3}, {kind: tokLParen, text: "(", pos: 6},
+			{kind: tokString, text: "a", pos: 7}, {kind: tokComma, text: ",", pos: 10}, {kind: tokNumber, text: "1", pos: 11},
+			{kind: tokComma, text: ",", pos: 13}, {kind: tokBool, text: "TRUE", pos: 15}, {kind: tokRParen, text: ")", pos: 19},
+		}},
+		{"in and not keywords", `in IN Not "in" "NOT" inside nothing`, []token{
+			{kind: tokIn, text: "in", pos: 1}, {kind: tokIn, text: "IN", pos: 4}, {kind: tokNot, text: "Not", pos: 7},
+			{kind: tokIdent, text: "in", pos: 11, quoted: true}, {kind: tokIdent, text: "NOT", pos: 16, quoted: true},
+			{kind: tokIdent, text: "inside", pos: 22}, {kind: tokIdent, text: "nothing", pos: 29},
+		}},
+		{"comma in braces", `{1, 2}`, []token{
+			{kind: tokLBrace, text: "{", pos: 1}, {kind: tokNumber, text: "1", pos: 2}, {kind: tokComma, text: ",", pos: 3},
+			{kind: tokNumber, text: "2", pos: 5}, {kind: tokRBrace, text: "}", pos: 6},
+		}},
+		{"in and not in braces", `{IN not}`, []token{
+			{kind: tokLBrace, text: "{", pos: 1}, {kind: tokIdent, text: "in", pos: 2}, {kind: tokIdent, text: "not", pos: 5},
+			{kind: tokRBrace, text: "}", pos: 8},
+		}},
 		{"brace mode without spaces", `{TODAY+5::DAYS}`, []token{
 			{kind: tokLBrace, text: "{", pos: 1}, {kind: tokIdent, text: "today", pos: 2}, {kind: tokPlus, text: "+", pos: 7},
 			{kind: tokNumber, text: "5", pos: 8}, {kind: tokDColon, text: "::", pos: 9}, {kind: tokIdent, text: "days", pos: 11},
@@ -139,7 +157,7 @@ func TestLexFilterErrorPositions(t *testing.T) {
 	}{
 		{`name = 'open`, 8}, {`"open`, 1}, {`n = 12.3.4`, 9}, {`n = @`, 5},
 		{`n = 1e3`, 6}, {`n = -`, 5}, {`n = +`, 5}, {`n = 1.`, 7},
-		{`n = 12abc`, 7}, {`n = 1,2`, 6}, {`n ! 2`, 3}, {`n = [1]`, 5},
+		{`n = 12abc`, 7}, {`n ! 2`, 3}, {`n = [1]`, 5},
 		{`n !`, 3}, {`n ! = 2`, 3}, {`n !x`, 3}, {`n !! 2`, 3},
 		{`a.b = 2`, 2}, {`"é" = @`, 8}, {"n = \x00", 5},
 		{`due > {{TODAY}}`, 8}, {`a = {1 + {2}}`, 10}, {`a = {1:2}`, 7}, {`a = 1 : 2`, 7},

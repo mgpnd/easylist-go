@@ -161,6 +161,136 @@ func TestParseNull(t *testing.T) {
 	}
 }
 
+// dumpLiteral renders a literal as its kind, text, and position, such as
+// string"a"@12, with a list's items in brackets.
+func dumpLiteral(l Literal) string {
+	kinds := [...]string{LiteralString: "string", LiteralNumber: "number", LiteralBool: "bool",
+		LiteralNull: "null", LiteralExpr: "expr", LiteralList: "list"}
+	out := fmt.Sprintf("%s%q@%d", kinds[l.Kind()], l.Text(), l.Pos())
+	if items := l.Items(); items != nil {
+		var parts []string
+		for _, item := range items {
+			parts = append(parts, dumpLiteral(item))
+		}
+		out += "[" + strings.Join(parts, " ") + "]"
+	}
+	return out
+}
+
+// These tests cover list values: IN and NOT IN lists with NULL items, list
+// values after CONTAINS and EXCLUDES, BETWEEN pairs, and the source text and
+// positions of lists and their items.
+func TestParseLists(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		op    PredicateOp
+		opPos int
+		value string
+	}{
+		// filter-parsing and contract-filter-ast scenarios.
+		{`status IN ('success', 'pending')`, OpIn, 8, `list"('success', 'pending')"@11[string"success"@12 string"pending"@23]`},
+		{`status NOT IN ('error')`, OpNotIn, 8, `list"('error')"@15[string"error"@16]`},
+		{`status IN ('success', 'pending', NULL)`, OpIn, 8, `list"('success', 'pending', NULL)"@11[string"success"@12 string"pending"@23 null"NULL"@34]`},
+		{`x IN ('a', 1, TRUE)`, OpIn, 3, `list"('a', 1, TRUE)"@6[string"a"@7 number"1"@12 bool"TRUE"@15]`},
+		{`status IN ('a')`, OpIn, 8, `list"('a')"@11[string"a"@12]`},
+		{`status in ('a')`, OpIn, 8, `list"('a')"@11[string"a"@12]`},
+		{`status not In ('a')`, OpNotIn, 8, `list"('a')"@15[string"a"@16]`},
+		{`status IN ('a', null)`, OpIn, 8, `list"('a', null)"@11[string"a"@12 null"null"@17]`},
+		{`tags CONTAINS ('a,b', 'c')`, OpContains, 6, `list"('a,b', 'c')"@15[string"a,b"@16 string"c"@23]`},
+		{`tags EXCLUDES ('x')`, OpExcludes, 6, `list"('x')"@15[string"x"@16]`},
+		{`age BETWEEN (30, 40)`, OpBetween, 5, `list"(30, 40)"@13[number"30"@14 number"40"@18]`},
+		{`tags CONTAINS 'a,b'`, OpContains, 6, `string"a,b"@15`},
+		{`age BETWEEN '30,40'`, OpBetween, 5, `string"30,40"@13`},
+		// Items are never split, trimmed, or checked against each other.
+		{`tags CONTAINS (' a ', 1.50, false)`, OpContains, 6, `list"(' a ', 1.50, false)"@15[string" a "@16 number"1.50"@23 bool"false"@29]`},
+		{`x NOT IN (NULL)`, OpNotIn, 3, `list"(NULL)"@10[null"NULL"@11]`},
+		{`x IN (NULL, null)`, OpIn, 3, `list"(NULL, null)"@6[null"NULL"@7 null"null"@13]`},
+		{`x BETWEEN ('2026-01-01', -1)`, OpBetween, 3, `list"('2026-01-01', -1)"@11[string"2026-01-01"@12 number"-1"@26]`},
+		{"x IN(\t'it''s' ,'b' )", OpIn, 3, `list"(\t'it''s' ,'b' )"@5[string"it's"@7 string"b"@16]`},
+		{`x NOT  in('a')`, OpNotIn, 3, `list"('a')"@10[string"a"@11]`},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			root, err := Parse(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, ok := root.(Predicate)
+			if !ok || p.FieldPos() != 1 || p.Operator() != tc.op || p.OperatorPos() != tc.opPos {
+				t.Fatalf("predicate: %#v", root)
+			}
+			if got := dumpLiteral(p.Value()); got != tc.value {
+				t.Errorf("value\n got %s\nwant %s", got, tc.value)
+			}
+			if p.Value().Expr() != nil {
+				t.Errorf("value has an expression tree")
+			}
+		})
+	}
+
+	// Keyword case does not matter.
+	for _, pair := range [][2]string{
+		{`status in ('a')`, `status IN ('a')`}, {`status not In ('a')`, `status NOT IN ('a')`},
+	} {
+		a, errA := Parse(pair[0])
+		b, errB := Parse(pair[1])
+		if errA != nil || errB != nil {
+			t.Fatalf("%v %v", errA, errB)
+		}
+		pa, pb := a.(Predicate), b.(Predicate)
+		if pa.Field() != pb.Field() || pa.Operator() != pb.Operator() || pa.OperatorPos() != pb.OperatorPos() ||
+			dumpLiteral(pa.Value()) != dumpLiteral(pb.Value()) {
+			t.Errorf("%s parses differently from %s", pair[0], pair[1])
+		}
+	}
+
+	// A double-quoted field may be named after a reserved word.
+	root, err := Parse(`"in" = 'x' AND "NOT" IN ('y')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top := root.(Logical)
+	l, r := top.Left().(Predicate), top.Right().(Predicate)
+	if l.Field() != "in" || !l.FieldQuoted() || l.Operator() != OpEq || r.Field() != "NOT" || !r.FieldQuoted() || r.Operator() != OpIn {
+		t.Fatalf("quoted reserved fields: %#v", root)
+	}
+
+	// Lists combine with connectors and groups like any predicate.
+	root, err = Parse(`(status IN ('a') AND x NOT IN (1, 2)) OR tags CONTAINS ('z')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top = root.(Logical)
+	if top.Operator() != Or || top.Left().(Logical).Operator() != And ||
+		top.Left().(Logical).Right().(Predicate).Operator() != OpNotIn || top.Right().(Predicate).Operator() != OpContains {
+		t.Fatalf("grouping: %#v", root)
+	}
+}
+
+// Items returns a copy, so a consumer cannot change the AST, and nil for
+// literals other than lists.
+func TestLiteralItems(t *testing.T) {
+	root, err := Parse(`status IN ('a', 'b')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := root.(Predicate).Value()
+	items := v.Items()
+	items[0] = Literal{}
+	_ = append(items[:1], Literal{})
+	if got := dumpLiteral(v); got != `list"('a', 'b')"@11[string"a"@12 string"b"@17]` {
+		t.Fatalf("list changed through Items: %s", got)
+	}
+	for _, input := range []string{`a = 'x'`, `a = 1`, `a = TRUE`, `a = NULL`, `a = TODAY`, `a = {1}`, `tags CONTAINS 'a,b'`} {
+		root, err := Parse(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v := root.(Predicate).Value(); v.Kind() == LiteralList || v.Items() != nil {
+			t.Errorf("%s: kind %d, items %v", input, v.Kind(), v.Items())
+		}
+	}
+}
+
 func TestParseGroupingAndAssociativity(t *testing.T) {
 	for _, tc := range []struct {
 		input      string
@@ -218,6 +348,18 @@ var syntaxErrorCases = []struct {
 	{"a = {1}}", 8}, {"a = {1 2}", 8}, {"a = {1 + * 2}", 10}, {"a = {()}", 7},
 	{"a = {1::DAYS::DAYS}", 13}, {"a = {DAYS::1}", 6}, {"a = {TODAY::DAYS}", 11},
 	{"a = {NULL}", 6}, {"a = {TRUE}", 6}, {"a = {AND}", 6}, {"a = {1 = 2}", 8},
+	// Lists. These come from the filter-parsing scenarios, then edge cases.
+	{"status IN 'a'", 11}, {"status NOT = 'a'", 12}, {"status IN ()", 12}, {"status IN ('a',)", 16},
+	{"a = 1, b = 2", 6}, {"age BETWEEN (30)", 16}, {"age BETWEEN (30, 40, 50)", 20},
+	{"due IN (TODAY)", 9}, {"due BETWEEN ({TODAY}, {NOW})", 14}, {"in = 'x'", 1}, {"not = 1", 1},
+	{"tags CONTAINS ('a', NULL)", 21}, {"age BETWEEN (NULL, 40)", 14}, {"status IN ('a'", 11},
+	{"n = 1,2", 6}, {"a = {1, 2}", 7}, {"x IN ('a', {1})", 12}, {"x IN ('a', TODAY)", 12},
+	{"tags CONTAINS (TODAY)", 16}, {"tags CONTAINS ()", 16}, {"tags EXCLUDES ('a',)", 20},
+	{"age BETWEEN ()", 14}, {"age BETWEEN (30,)", 17}, {"x IN ('a' 'b')", 11}, {"x IN (('a'))", 7},
+	{"x IN ('a'))", 11}, {"x = ('a')", 5}, {"x > ('a', 'b')", 5}, {"x IN", 5}, {"x NOT", 6},
+	{"x NOT IN", 9}, {"x NOT ('a')", 7}, {"NOT x = 1", 1}, {"x IN ('a') NOT", 12},
+	{"x NOT NOT IN ('a')", 7}, {"x IN NOT ('a')", 6}, {"x IN ('a'), ('b')", 11}, {"x IN (,)", 7},
+	{"(x IN ('a')", 1}, {"x CONTAINS ('a', 'b'", 12}, {"x IN status", 6}, {`x IN ("a")`, 7},
 }
 
 func TestParseSyntaxErrors(t *testing.T) {
@@ -245,7 +387,7 @@ var errorMessageCases = []struct{ input, want string }{
 	{"", "unexpected end of input, expected field or '(' at position 1"},
 	{"a 1", "unexpected number at position 3"},
 	{"a =", "unexpected end of input, expected string, number, boolean, NULL, time keyword, or '{' at position 4"},
-	{"a BETWEEN 1", "unexpected number, expected string at position 11"},
+	{"a BETWEEN 1", "unexpected number, expected string or '(' at position 11"},
 	{"(a = 1 OR)", "unexpected ')', expected field or '(' at position 10"},
 	{"a = 1 b = 2", "unexpected field at position 7"},
 	{"a = 1)", "unmatched ')' at position 6"},
@@ -254,6 +396,9 @@ var errorMessageCases = []struct{ input, want string }{
 	{"a = 'x", "unterminated quote at position 5"},
 	{"1abc = 1", "invalid number at position 2"},
 	{"a = 1 @", "unexpected character '@' at position 7"},
+	{"status IN ()", "unexpected ')', expected string, number, boolean, or NULL at position 12"},
+	{"age BETWEEN (30)", "unexpected ')', expected ',' at position 16"},
+	{"status IN ('a'", "unmatched '(' at position 11"},
 	{"AND a = 1", "unexpected AND, expected field or '(' at position 1"},
 	{"a = 1 != 2", "unexpected '!=' at position 7"},
 	{"a = )", "unmatched ')' at position 5"},
@@ -262,18 +407,18 @@ var errorMessageCases = []struct{ input, want string }{
 	{"(a = 1 b = 2)", "unexpected field, expected AND, OR, or ')' at position 8"},
 	{"(a = 1 OR b = 2 c = 3)", "unexpected field, expected AND, OR, or ')' at position 17"},
 	{"age > NULL", "unexpected NULL, expected string, number, boolean, time keyword, or '{' at position 7"},
-	{"name CONTAINS NULL", "unexpected NULL, expected string, number, or boolean at position 15"},
-	{"age BETWEEN NULL", "unexpected NULL, expected string at position 13"},
+	{"name CONTAINS NULL", "unexpected NULL, expected string, number, boolean, or '(' at position 15"},
+	{"age BETWEEN NULL", "unexpected NULL, expected string or '(' at position 13"},
 	{"NULL = 'x'", "unexpected NULL, expected field or '(' at position 1"},
 	{"a = NULL NULL", "unexpected NULL at position 10"},
 	{"due = tomorrow", "unknown time keyword 'tomorrow' at position 7"},
 	{"due = {TOMORROW}", "unknown time keyword 'TOMORROW' at position 8"},
 	{`due = "today"`, "unexpected quoted identifier at position 7"},
 	{`due = {"today"}`, "unexpected quoted identifier at position 8"},
-	{"name CONTAINS TODAY", "unexpected identifier, expected string, number, or boolean at position 15"},
-	{"name EXCLUDES {1}", "unexpected '{', expected string, number, or boolean at position 15"},
-	{"due BETWEEN TODAY", "unexpected identifier, expected string at position 13"},
-	{"due BETWEEN {TODAY}", "unexpected '{', expected string at position 13"},
+	{"name CONTAINS TODAY", "unexpected identifier, expected string, number, boolean, or '(' at position 15"},
+	{"name EXCLUDES {1}", "unexpected '{', expected string, number, boolean, or '(' at position 15"},
+	{"due BETWEEN TODAY", "unexpected identifier, expected string or '(' at position 13"},
+	{"due BETWEEN {TODAY}", "unexpected '{', expected string or '(' at position 13"},
 	{"due > {TODAY + 5::DAYS", "unexpected end of input, expected '}', '+', '-', '*', or '/' at position 23"},
 	{"due > {}", "unexpected '}', expected time keyword, number, '(', or '-' at position 8"},
 	{"due > {TODAY +}", "unexpected '}', expected time keyword, number, '(', or '-' at position 15"},
@@ -291,6 +436,24 @@ var errorMessageCases = []struct{ input, want string }{
 	{"t > {NOW - 3::5}", "unexpected number, expected unit at position 15"},
 	{"t > {NOW - 3:HOURS}", "expected ':' after ':' at position 13"},
 	{"t > {NOW - 1.5::HOURS}", "duration amount 1.5 is not a whole number at position 12"},
+	{"status IN 'a'", "unexpected string, expected '(' at position 11"},
+	{"status NOT = 'a'", "unexpected '=', expected IN at position 12"},
+	{"status IN ('a',)", "unexpected ')', expected string, number, boolean, or NULL at position 16"},
+	{"a = 1, b = 2", "unexpected ',' at position 6"},
+	{"age BETWEEN (30, 40, 50)", "unexpected ',', expected ')' at position 20"},
+	{"due IN (TODAY)", "unexpected identifier, expected string, number, boolean, or NULL at position 9"},
+	{"due BETWEEN ({TODAY}, {NOW})", "unexpected '{', expected string, number, or boolean at position 14"},
+	{"in = 'x'", "unexpected IN, expected field or '(' at position 1"},
+	{"not = 1", "unexpected NOT, expected field or '(' at position 1"},
+	{"tags CONTAINS ('a', NULL)", "unexpected NULL, expected string, number, or boolean at position 21"},
+	{"age BETWEEN (NULL, 40)", "unexpected NULL, expected string, number, or boolean at position 14"},
+	{"x IN ('a', TODAY)", "unexpected identifier, expected string, number, boolean, or NULL at position 12"},
+	{"tags CONTAINS (TODAY)", "unexpected identifier, expected string, number, or boolean at position 16"},
+	{"x IN ('a' b)", "unexpected field, expected ')' or ',' at position 11"},
+	{"x IN status", "unexpected identifier, expected '(' at position 6"},
+	{"x NOT", "unexpected end of input, expected IN at position 6"},
+	{"x IN ('a'))", "unmatched ')' at position 11"},
+	{"a = {1, 2}", "unexpected ',', expected '}', '+', '-', '*', or '/' at position 7"},
 }
 
 func TestParseErrorMessages(t *testing.T) {
@@ -354,7 +517,7 @@ func TestParseConcurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 200; j++ {
-				if root, err := Parse(`(a = 1 OR b != 'x') AND c BETWEEN '1,2'`); err != nil || root == nil {
+				if root, err := Parse(`(a = 1 OR b != 'x') AND c BETWEEN '1,2' AND d NOT IN ('x', NULL)`); err != nil || root == nil {
 					t.Error(err)
 				}
 				if _, err := Parse(`a = 1 AND (`); err == nil {
@@ -520,7 +683,7 @@ func TestParseExpressionLiterals(t *testing.T) {
 	if v := root.(Predicate).Value(); v.Kind() != LiteralNumber || v.Expr() != nil {
 		t.Fatalf("plain literal: kind %d, expr %v", v.Kind(), v.Expr())
 	}
-	for _, input := range []string{`a = 'TODAY'`, `a = TRUE`, `a = NULL`, `a BETWEEN '1,2'`, `a CONTAINS 'x'`} {
+	for _, input := range []string{`a = 'TODAY'`, `a = TRUE`, `a = NULL`, `a BETWEEN '1,2'`, `a CONTAINS 'x'`, `a IN ('x')`} {
 		root, err := Parse(input)
 		if err != nil {
 			t.Fatal(err)
