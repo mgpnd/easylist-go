@@ -14,6 +14,10 @@ name = 'Artem' AND age < 30
 country = NULL OR country EXCLUDES 'fr'
 (status = 'active' OR status = 'blocked') AND "Order" >= 10
 age BETWEEN '30,40'
+age BETWEEN (30, 40)
+status IN ('success', 'pending', NULL)
+status NOT IN ('error')
+tags CONTAINS ('a,b', 'c')
 created_at >= START_OF_WEEK AND created_at <= END_OF_WEEK
 due_date > {today + 5::days}
 due < {TODAY + 5::BUSINESS_DAYS}
@@ -45,13 +49,20 @@ or expression       = and expression, { "OR", and expression } ;
 and expression      = primary, { "AND", primary } ;
 primary             = predicate | "(", or expression, ")" ;
 predicate           = identifier, comparison operator, comparison value
-                    | identifier, set operator, plain value
-                    | identifier, "BETWEEN", string
-                    | identifier, ( "=" | "!=" ), "NULL" ;
+                    | identifier, set operator, ( plain value | value list )
+                    | identifier, "BETWEEN", ( string | range )
+                    | identifier, ( "=" | "!=" ), "NULL"
+                    | identifier, [ "NOT" ], "IN", in list ;
 comparison operator = "=" | "!=" | ">" | ">=" | "<" | "<=" ;
 set operator        = "CONTAINS" | "EXCLUDES" ;
 plain value         = string | number | boolean ;
 comparison value    = plain value | time keyword | "{", sum, "}" ;
+
+(* Lists. *)
+value list          = "(", plain value, { ",", plain value }, ")" ;
+in list             = "(", in item, { ",", in item }, ")" ;
+in item             = plain value | "NULL" ;
+range               = "(", plain value, ",", plain value, ")" ;
 
 (* Brace expressions. *)
 sum                 = term, { ( "+" | "-" ), term } ;
@@ -88,7 +99,7 @@ boolean           = "TRUE" | "FALSE" ;
 letter            = ? an ASCII letter, A to Z or a to z ? ;
 digit             = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 symbol            = "=" | "!=" | ">" | ">=" | "<" | "<=" | "(" | ")"
-                  | "{" | "}" | "+" | "-" | "*" | "/" | "::" ;
+                  | "{" | "}" | "+" | "-" | "*" | "/" | "::" | "," ;
 ```
 
 - **Identifiers.** Unquoted names fold ASCII uppercase letters to lowercase;
@@ -97,9 +108,10 @@ symbol            = "=" | "!=" | ">" | ">=" | "<" | "<=" | "(" | ")"
   database identifier limit. `"AND" = 'a''b'` compares a column literally
   named `AND` with `a'b`.
 - **Keywords.** Outside braces, a word spelled `AND`, `OR`, `CONTAINS`,
-  `EXCLUDES`, `BETWEEN`, `TRUE`, `FALSE`, or `NULL`, in any case, is that
-  keyword, not an identifier. These are reserved words, so a column named after
-  one, such as `and`, `true`, or `null`, must be double-quoted: `"null" = 'x'`.
+  `EXCLUDES`, `BETWEEN`, `IN`, `NOT`, `TRUE`, `FALSE`, or `NULL`, in any case,
+  is that keyword, not an identifier. These are reserved words, so a column
+  named after one, such as `and`, `in`, `not`, or `null`, must be
+  double-quoted: `"null" = 'x'`, `"in" = 'x'`.
   The relative time keywords and units are *not* reserved: they are ordinary
   words that the grammar recognises only on the value side and inside braces.
 - **Strings** use single quotes, with a doubled single quote for an embedded
@@ -115,7 +127,9 @@ symbol            = "=" | "!=" | ">" | ">=" | "<" | "<=" | "(" | ")"
   Inside braces every word is an identifier, even `AND` or `TRUE`, and a second
   `{` is an error: braces do not nest.
 - **Symbols.** `!=`, `>=`, `<=`, and `::` are single tokens: `!` or `:` on its
-  own, or separated from the next character by whitespace, is an error.
+  own, or separated from the next character by whitespace, is an error. `,` is
+  a token in both modes, but only the list rules accept it, so a `,` anywhere
+  else, such as in `a = 1, b = 2` or `{1, 2}`, is a syntax error at the comma.
 
 Error positions are 1-based byte offsets, including in UTF-8 input. Missing
 input at the end is reported at `len(filter)+1`.
@@ -125,22 +139,52 @@ input at the end is reported at `len(filter)+1`.
 `=`, `!=`, `>`, `>=`, `<`, and `<=` take a string, a number, a Boolean, a
 relative time keyword, or a brace expression. `!=` accepts the same values as
 `=`, and the parser produces `OpNeq` for it. `CONTAINS` and `EXCLUDES` take a
-string, a number, or a Boolean.
+string, a number, a Boolean, or a value list.
 
-`NULL` is allowed only as the value of `=` and `!=`: `country = NULL` and
-`country != NULL` test whether a field is NULL or not NULL. The predicate keeps
-its `OpEq` or `OpNeq` operator, and its value is a `LiteralNull` literal whose
-text is the keyword's source spelling and whose position is the keyword's.
+A value list is `(`, one or more items separated by `,`, and `)`. An empty
+list, `status IN ()`, and a trailing comma, `status IN ('a',)`, are syntax
+errors at the `)`. Items are strings, numbers, or Booleans, and an `IN` list
+may also hold `NULL`. Items of different kinds may be mixed, as in
+`x IN ('a', 1, TRUE)`; the parser does not check them against each other or
+against any field type.
+
+`IN` and `NOT IN` take a value list. `status IN ('success', 'pending')`
+matches the rows that `=` would match for any item, and
+`status NOT IN ('error')` the rows that `!=` would match for every item, so a
+row whose field is NULL matches `NOT IN` unless the list contains `NULL`.
+The keywords are case-insensitive, and `NOT` is valid only right before
+`IN`, so `status NOT = 'a'` is an error at the `=`. A list is required, so
+`status IN 'a'` is an error at the string. The parser produces `OpIn` or
+`OpNotIn`; the operator position of `NOT IN` is the `NOT`'s. Which field
+types accept them is up to the compiler.
+
+`NULL` is allowed only as the value of `=` and `!=`, and as an item of an
+`IN` or `NOT IN` list: `country = NULL` and `country != NULL` test whether a
+field is NULL or not NULL, and `status IN ('a', NULL)` matches `a` or NULL.
+The predicate keeps its `OpEq` or `OpNeq` operator, and its value is a
+`LiteralNull` literal whose text is the keyword's source spelling and whose
+position is the keyword's; a `NULL` list item is the same kind of literal.
 Anywhere else `NULL` is a syntax error at its position, for example
-`age > NULL`, `name CONTAINS NULL`, `age BETWEEN NULL`, or `NULL = 'x'`.
-`'NULL'` in single quotes is an ordinary string.
+`age > NULL`, `name CONTAINS NULL`, `age BETWEEN NULL`, `NULL = 'x'`,
+`tags CONTAINS ('a', NULL)`, or `age BETWEEN (NULL, 40)`. `'NULL'` in single
+quotes is an ordinary string.
 
-`BETWEEN` takes one quoted string containing exactly one comma and two
-nonempty trimmed bounds, for example `age BETWEEN '30,40'`. It does not
-accept SQL-style `BETWEEN 30 AND 40`, and it does not accept relative values.
-The conversion of `BETWEEN` bounds is a semantic check that a compiler such as
-[easylist-sql-goqu](../../easylist-sql-goqu) performs against the selected
-table's schema.
+`BETWEEN` takes either one quoted string containing exactly one comma and two
+nonempty trimmed bounds, for example `age BETWEEN '30,40'`, or a list of
+exactly two items, for example `age BETWEEN (30, 40)`. A list with one item
+is an error at the `)`, and one with three or more at the second `,`. It does
+not accept SQL-style `BETWEEN 30 AND 40`, and it does not accept relative
+values. The conversion of `BETWEEN` bounds is a semantic check that a
+compiler such as [easylist-sql-goqu](../../easylist-sql-goqu) performs
+against the selected table's schema.
+
+The list forms of `CONTAINS`, `EXCLUDES`, and `BETWEEN` sit beside the quoted
+forms, which are unchanged, and differ from them in two ways:
+
+| Quoted form                | List form                   | Difference |
+| -------------------------- | --------------------------- | ---------- |
+| `tags CONTAINS 'a,b'`      | `tags CONTAINS ('a', 'b')`  | The parser keeps the quoted form as one string, and a compiler splits it on commas and trims each part. List items are never split or trimmed, so `tags CONTAINS ('a,b', 'c')` matches the element `a,b`. |
+| `age BETWEEN '30,40'`      | `age BETWEEN (30, 40)`      | A compiler converts the quoted form's bounds to the field's type. Each list bound keeps the kind it was written as, so `age BETWEEN ('30', '40')` gives two strings. |
 
 ## Relative time values
 
@@ -182,7 +226,9 @@ size. Durations of different units can be combined:
 
 Relative values are allowed only with `=`, `!=`, `>`, `>=`, `<`, and `<=`.
 `name CONTAINS TODAY`, `due BETWEEN TODAY`, and `name CONTAINS {1}` are errors
-at the keyword or the `{`.
+at the keyword or the `{`. Lists hold no relative values either, so
+`due IN (TODAY)` and `due BETWEEN ({TODAY}, {NOW})` are errors at the keyword
+or the first `{`.
 
 ## The expression tree
 
@@ -253,3 +299,14 @@ In summary:
 The AST retains decoded strings, exact numeric spelling, literal kinds,
 expression trees, and source byte positions, so a compiler can report errors
 at the original literal. The AST is immutable and can be reused concurrently.
+
+A value list becomes a literal of kind `LiteralList`. Its text is the list's
+source spelling, parentheses included, and its position is the `(`'s.
+`Literal.Items()` returns a copy of its items in source order, each a
+`LiteralString`, `LiteralNumber`, `LiteralBool`, or, in an `IN` or `NOT IN`
+list, `LiteralNull` literal with its own text and position. `Items()` is nil
+for every other kind. For `status IN ('success', 'pending')` the value is a
+list with text `('success', 'pending')` at position 11, holding the strings
+`success` at 12 and `pending` at 23. An `OpIn` or `OpNotIn` predicate always
+has a list value. Consumers that switch on `LiteralKind` or `PredicateOp`
+must handle or reject `LiteralList`, `OpIn`, and `OpNotIn`.

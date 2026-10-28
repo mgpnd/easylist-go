@@ -2,7 +2,10 @@
 // trees without requiring a database schema or SQL dependencies.
 package filter
 
-import "strconv"
+import (
+	"slices"
+	"strconv"
+)
 
 // Expr is a filter expression. Only this package can implement it.
 // Inspect expressions through the Predicate and Logical interfaces.
@@ -11,7 +14,8 @@ type Expr interface{ filterExpr() }
 // Predicate is a field comparison with a literal value. Field names use
 // PostgreSQL ASCII case folding and are never truncated; length limits belong
 // to the consumer that resolves them.
-// FieldPos and OperatorPos are 1-based byte offsets in the input.
+// FieldPos and OperatorPos are 1-based byte offsets in the input; for NOT IN,
+// OperatorPos is the position of NOT.
 type Predicate interface {
 	Expr
 	Field() string
@@ -43,8 +47,16 @@ const (
 	OpLte                         // Less than or equal (<=).
 	OpContains                    // CONTAINS.
 	OpExcludes                    // EXCLUDES.
-	OpBetween                     // BETWEEN with a single string literal.
+	OpBetween                     // BETWEEN with a string literal or a two-item list.
 	OpNeq                         // Not equal (!=).
+	// IN with a LiteralList value whose items are strings, numbers,
+	// Booleans, or NULL. Consumers that switch on PredicateOp must handle or
+	// reject this operator.
+	OpIn
+	// NOT IN with a LiteralList value, like OpIn. Its operator position is
+	// the position of NOT. Consumers that switch on PredicateOp must handle
+	// or reject this operator.
+	OpNotIn
 )
 
 // LogicalOp identifies a logical connector.
@@ -68,30 +80,44 @@ const (
 	// included, and Expr returns its tree. Consumers that switch on
 	// LiteralKind must handle or reject this kind.
 	LiteralExpr
+	// A parenthesized value list, such as ('a', 'b'). Its text is the source
+	// spelling, parentheses included, its position is the '(', and Items
+	// returns its items. It is the value of IN and NOT IN, and may be the
+	// value of CONTAINS, EXCLUDES, and BETWEEN. Consumers that switch on
+	// LiteralKind must handle or reject this kind.
+	LiteralList
 )
 
 // Literal is a read-only literal value. Positions are 1-based byte offsets.
 type Literal struct {
-	kind LiteralKind
-	text string
-	pos  int
-	expr ExprNode
+	kind  LiteralKind
+	text  string
+	pos   int
+	expr  ExprNode
+	items []Literal
 }
 
 // Kind reports the literal's syntax kind.
 func (l Literal) Kind() LiteralKind { return l.kind }
 
-// Text returns decoded string text or the original numeric, Boolean, NULL, or
-// expression spelling.
+// Text returns decoded string text or the original numeric, Boolean, NULL,
+// expression, or list spelling.
 func (l Literal) Text() string { return l.text }
 
 // Pos returns the literal's 1-based byte position in the input. For an
-// expression it is the position of the keyword or of the opening '{'.
+// expression it is the position of the keyword or of the opening '{', and for
+// a list the position of the '('.
 func (l Literal) Pos() int { return l.pos }
 
 // Expr returns the root of an expression literal's tree, or nil for literals
 // of every other kind. The tree mirrors the source and is never evaluated.
 func (l Literal) Expr() ExprNode { return l.expr }
+
+// Items returns a copy of a list literal's items in source order, or nil for
+// literals of every other kind. Each item is a string, number, Boolean, or
+// NULL literal with its own text and position; only IN and NOT IN lists
+// contain NULL items.
+func (l Literal) Items() []Literal { return slices.Clone(l.items) }
 
 // ExprNode is a node of a value expression tree. Only this package can
 // implement it. Inspect nodes through NumberNode, KeywordNode, DurationNode,

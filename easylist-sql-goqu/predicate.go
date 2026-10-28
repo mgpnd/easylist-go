@@ -25,6 +25,7 @@ var operatorText = map[filter.PredicateOp]string{
 	filter.OpEq: "=", filter.OpNeq: "!=", filter.OpGt: ">", filter.OpGte: ">=",
 	filter.OpLt: "<", filter.OpLte: "<=", filter.OpContains: "CONTAINS",
 	filter.OpExcludes: "EXCLUDES", filter.OpBetween: "BETWEEN",
+	filter.OpIn: "IN", filter.OpNotIn: "NOT IN",
 }
 
 // buildPredicate validates one predicate against the plan's fields before
@@ -69,9 +70,17 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 		return arrayPredicate(field, column, operator, value)
 	}
 
+	if operator == filter.OpIn || operator == filter.OpNotIn {
+		return inPredicate(field, column, operator, value)
+	}
+
 	if operator == filter.OpContains || operator == filter.OpExcludes {
 		if field.Type != easylist.Text {
 			return unsupported()
+		}
+		if value.Kind() == filter.LiteralList {
+			// Reserved so that a later change can give text lists a meaning.
+			return nil, fmt.Errorf("operator %q on text field %q does not accept a value list at position %d", operatorText[operator], name, value.Pos())
 		}
 		arg, err := predicateArgument(field, value.Kind(), value.Text(), value.Pos())
 		if err != nil {
@@ -90,6 +99,17 @@ func buildPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, er
 	if operator == filter.OpBetween {
 		if !ordered {
 			return unsupported()
+		}
+		if value.Kind() == filter.LiteralList {
+			// Each bound keeps the kind it was written as and is not trimmed.
+			if len(value.Items()) != 2 {
+				return nil, fmt.Errorf("BETWEEN requires a list of two bounds at position %d", value.Pos())
+			}
+			bounds, _, err := listArguments(field, value, false)
+			if err != nil {
+				return nil, err
+			}
+			return goqu.L("? BETWEEN ? AND ?", column, bounds[0], bounds[1]), nil
 		}
 		if value.Kind() != filter.LiteralString || strings.Count(value.Text(), ",") != 1 {
 			return nil, fmt.Errorf("BETWEEN requires two quoted comma-separated bounds at position %d", value.Pos())
@@ -211,6 +231,45 @@ func wholeDay(column exp.LiteralExpression, operator filter.PredicateOp, start t
 	return goqu.L("COALESCE(NOT (? >= ? AND ? < ?), TRUE)", column, s, column, e)
 }
 
+// inPredicate compiles IN or NOT IN on a scalar field. The non-NULL items are
+// bound in list order inside an SQL IN list, so PostgreSQL infers each
+// argument's type from the column, and NULL never enters the list. The SQL IN
+// or NOT IN is then NULL only for a NULL field, and COALESCE replaces it with
+// whether such rows match: IN with a NULL item and NOT IN without one match
+// them. A list of only NULL items is = NULL or != NULL. The field's SQL is
+// emitted once.
+func inPredicate(field easylist.PlanField, column exp.LiteralExpression, operator filter.PredicateOp, value filter.Literal) (exp.Expression, error) {
+	if value.Kind() != filter.LiteralList {
+		// The parser always gives IN and NOT IN a list.
+		return nil, fmt.Errorf("operator %q requires a value list for field %q at position %d", operatorText[operator], field.Name, value.Pos())
+	}
+	args, hasNull, err := listArguments(field, value, true)
+	if err != nil {
+		return nil, err
+	}
+	in := operator == filter.OpIn
+	if len(args) == 0 {
+		if in {
+			return goqu.L("? IS NULL", column), nil
+		}
+		return goqu.L("? IS NOT NULL", column), nil
+	}
+	sql := "? IN (" + strings.Repeat("?, ", len(args)-1) + "?)"
+	if !in {
+		sql = "? NOT IN (" + strings.Repeat("?, ", len(args)-1) + "?)"
+	}
+	args = append([]any{column}, args...)
+	switch {
+	case in && !hasNull:
+		// NULL for a NULL field, which WHERE already treats as no match.
+		return goqu.L(sql, args...), nil
+	case in == hasNull:
+		// IN with a NULL item, or NOT IN without one, matches a NULL field.
+		return goqu.L("COALESCE("+sql+", TRUE)", args...), nil
+	}
+	return goqu.L("COALESCE("+sql+", FALSE)", args...), nil
+}
+
 // arrayPredicate compiles CONTAINS or EXCLUDES on an array field. Each value
 // is bound once and compared with "= ANY", so PostgreSQL infers its type from
 // the column's element type, as it does for scalar comparisons. CONTAINS
@@ -234,10 +293,15 @@ func arrayPredicate(field easylist.PlanField, column exp.LiteralExpression, oper
 }
 
 // arrayValues converts an array predicate's literal into its list of element
-// values. A string literal is always a comma-separated list whose trimmed
-// items take the literal kind of the element type; an unquoted number or
-// boolean is one value.
+// values. A list literal gives one value per item, never split or trimmed. A
+// string literal is always a comma-separated list whose trimmed items take
+// the literal kind of the element type; an unquoted number or boolean is one
+// value.
 func arrayValues(field easylist.PlanField, value filter.Literal) ([]any, error) {
+	if value.Kind() == filter.LiteralList {
+		values, _, err := listArguments(field, value, false)
+		return values, err
+	}
 	if value.Kind() != filter.LiteralString {
 		arg, err := predicateArgument(field, value.Kind(), value.Text(), value.Pos())
 		if err != nil {
@@ -266,6 +330,34 @@ func arrayValues(field easylist.PlanField, value filter.Literal) ([]any, error) 
 		values[i] = arg
 	}
 	return values, nil
+}
+
+// listArguments converts the non-NULL items of a list literal, each under its
+// own kind and position, and reports whether any item was NULL. NULL items are
+// an error unless allowNull is set; the parser allows them only in IN and NOT
+// IN lists.
+func listArguments(field easylist.PlanField, list filter.Literal, allowNull bool) (args []any, hasNull bool, err error) {
+	items := list.Items()
+	if len(items) == 0 {
+		return nil, false, fmt.Errorf("empty value list for field %q at position %d", field.Name, list.Pos())
+	}
+	args = make([]any, 0, len(items))
+	for _, item := range items {
+		if item.Kind() == filter.LiteralNull {
+			if !allowNull {
+				return nil, false, fmt.Errorf("NULL item in the value list for field %q at position %d", field.Name, item.Pos())
+			}
+			hasNull = true
+			continue
+		}
+		// predicateArgument rejects items of any unexpected kind.
+		arg, err := predicateArgument(field, item.Kind(), item.Text(), item.Pos())
+		if err != nil {
+			return nil, false, err
+		}
+		args = append(args, arg)
+	}
+	return args, hasNull, nil
 }
 
 // predicateArgument converts a single scalar value. Numeric expressions keep

@@ -7,14 +7,16 @@ package filter
 	expr Expr
 	op   opAt
 	lit  Literal
+	lits []Literal
 	node ExprNode
 }
 
-%token <tok> tIDENT tSTRING tNUMBER tBOOL tNEQ tGTE tLTE tCONTAINS tEXCLUDES tBETWEEN tAND tOR tNULL tDCOLON '=' '>' '<' '(' ')' '{' '}' '+' '-' '*' '/'
+%token <tok> tIDENT tSTRING tNUMBER tBOOL tNEQ tGTE tLTE tCONTAINS tEXCLUDES tBETWEEN tAND tOR tNULL tDCOLON tIN tNOT '=' '>' '<' '(' ')' '{' '}' '+' '-' '*' '/' ','
 
 %type <expr> or_expr and_expr primary predicate
 %type <op> comparison_op set_op
-%type <lit> plain_value comparison_value
+%type <lit> plain_value comparison_value in_item in_list value_list range
+%type <lits> in_items plain_items
 %type <node> sum term factor atom
 
 %%
@@ -44,6 +46,10 @@ predicate
 	| tIDENT tBETWEEN tSTRING               { $$ = &predicateNode{field: $1, operator: OpBetween, operatorPos: $2.pos, value: Literal{kind: LiteralString, text: $3.text, pos: $3.pos}} }
 	| tIDENT '=' tNULL                      { $$ = &predicateNode{field: $1, operator: OpEq, operatorPos: $2.pos, value: Literal{kind: LiteralNull, text: $3.text, pos: $3.pos}} }
 	| tIDENT tNEQ tNULL                     { $$ = &predicateNode{field: $1, operator: OpNeq, operatorPos: $2.pos, value: Literal{kind: LiteralNull, text: $3.text, pos: $3.pos}} }
+	| tIDENT tIN in_list                    { $$ = &predicateNode{field: $1, operator: OpIn, operatorPos: $2.pos, value: $3} }
+	| tIDENT tNOT tIN in_list               { $$ = &predicateNode{field: $1, operator: OpNotIn, operatorPos: $2.pos, value: $4} }
+	| tIDENT set_op value_list              { $$ = &predicateNode{field: $1, operator: $2.op, operatorPos: $2.pos, value: $3} }
+	| tIDENT tBETWEEN range                 { $$ = &predicateNode{field: $1, operator: OpBetween, operatorPos: $2.pos, value: $3} }
 	;
 
 comparison_op
@@ -64,6 +70,33 @@ plain_value
 	: tSTRING { $$ = Literal{kind: LiteralString, text: $1.text, pos: $1.pos} }
 	| tNUMBER { $$ = Literal{kind: LiteralNumber, text: $1.text, pos: $1.pos} }
 	| tBOOL   { $$ = Literal{kind: LiteralBool, text: $1.text, pos: $1.pos} }
+	;
+
+in_list
+	: '(' in_items ')' { $$ = yylex.(*parseState).list($1, $2, $3) }
+	;
+
+in_items
+	: in_item              { $$ = []Literal{$1} }
+	| in_items ',' in_item { $$ = append($1, $3) }
+	;
+
+in_item
+	: plain_value
+	| tNULL { $$ = Literal{kind: LiteralNull, text: $1.text, pos: $1.pos} }
+	;
+
+value_list
+	: '(' plain_items ')' { $$ = yylex.(*parseState).list($1, $2, $3) }
+	;
+
+plain_items
+	: plain_value                 { $$ = []Literal{$1} }
+	| plain_items ',' plain_value { $$ = append($1, $3) }
+	;
+
+range
+	: '(' plain_value ',' plain_value ')' { $$ = yylex.(*parseState).list($1, []Literal{$2, $4}, $5) }
 	;
 
 comparison_value

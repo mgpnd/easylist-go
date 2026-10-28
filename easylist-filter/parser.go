@@ -54,7 +54,7 @@ var yyCodes = [...]int{
 	tokContains: tCONTAINS, tokExcludes: tEXCLUDES, tokBetween: tBETWEEN,
 	tokAnd: tAND, tokOr: tOR, tokLParen: '(', tokRParen: ')', tokNeq: tNEQ,
 	tokNull: tNULL, tokLBrace: '{', tokRBrace: '}', tokPlus: '+', tokMinus: '-',
-	tokStar: '*', tokSlash: '/', tokDColon: tDCOLON,
+	tokStar: '*', tokSlash: '/', tokDColon: tDCOLON, tokComma: ',', tokIn: tIN, tokNot: tNOT,
 }
 
 // Lex implements yyLexer.
@@ -93,6 +93,12 @@ func (s *parseState) fail(format string, args ...any) {
 // the length, so it is the same span of the input as the folded text.
 func (s *parseState) spelling(tok token) string {
 	return s.src[tok.pos-1 : tok.pos-1+len(tok.text)]
+}
+
+// list builds a list literal from its parentheses and items. Its text is the
+// source span from '(' to ')'.
+func (s *parseState) list(lparen token, items []Literal, rparen token) Literal {
+	return Literal{kind: LiteralList, text: s.src[lparen.pos-1 : rparen.pos], pos: lparen.pos, items: items}
 }
 
 // keyword builds the node for an identifier on the value side or inside
@@ -159,7 +165,8 @@ type syntaxContext struct {
 
 // errorContext looks at the tokens before the lookahead. Inside braces an
 // identifier is a time keyword, or a unit right after '::'; right after a
-// predicate operator it is an identifier; elsewhere it is a field.
+// predicate operator or where a list item belongs it is an identifier;
+// elsewhere it is a field.
 func (s *parseState) errorContext() syntaxContext {
 	look := s.next - 1 // index of the lookahead
 	if s.atEOF {
@@ -187,10 +194,17 @@ func (s *parseState) errorContext() syntaxContext {
 		prev.kind == tokGte || prev.kind == tokLt || prev.kind == tokLte:
 		ctx.ident = "identifier"
 		ctx.afterCmp = prev.text
-	case prev.kind == tokContains || prev.kind == tokExcludes || prev.kind == tokBetween:
+	case isValueOperator(prev.kind) || prev.kind == tokNot || prev.kind == tokComma ||
+		prev.kind == tokLParen && look >= 2 && isValueOperator(s.tokens[look-2].kind):
 		ctx.ident = "identifier"
 	}
 	return ctx
+}
+
+// isValueOperator reports whether kind is an operator that a value list may
+// follow.
+func isValueOperator(kind tokenKind) bool {
+	return kind == tokContains || kind == tokExcludes || kind == tokBetween || kind == tokIn
 }
 
 // tokenDisplay maps generated token names to user-facing names. Names not
@@ -201,6 +215,7 @@ var tokenDisplay = map[string]string{
 	"tBOOL": "boolean", "tNEQ": "'!='", "tGTE": "'>='", "tLTE": "'<='",
 	"tAND": "AND", "tOR": "OR", "tBETWEEN": "BETWEEN",
 	"tCONTAINS": "CONTAINS", "tEXCLUDES": "EXCLUDES", "tNULL": "NULL", "tDCOLON": "'::'",
+	"tIN": "IN", "tNOT": "NOT",
 }
 
 // describeSyntaxError rewrites goyacc's verbose message, such as

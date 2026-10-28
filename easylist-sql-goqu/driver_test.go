@@ -3,6 +3,7 @@ package sqlgoqu
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -16,6 +17,7 @@ var usersList = easylist.List{
 		{Name: "id", Type: easylist.Integer},
 		{Name: "name", Type: easylist.Text},
 		{Name: "age", Type: easylist.Integer, Nullable: true},
+		{Name: "status", Type: easylist.Text, Nullable: true},
 		{Name: "country", Type: easylist.Text, Nullable: true, SQL: "c.name", Joins: []string{"country"}},
 		{Name: "last_order", Type: easylist.Timestamp, Nullable: true, SQL: "lo.created_at", Joins: []string{"last_order"}},
 	},
@@ -152,6 +154,27 @@ func TestCompilePage(t *testing.T) {
 			sql:    `SELECT u."id" AS "id" FROM users AS u LEFT JOIN countries c ON c.id = u.country_id WHERE ((c.name) IS NULL OR COALESCE((c.name) NOT ILIKE $1 ESCAPE E'\\', TRUE)) ORDER BY u."id" ASC LIMIT $2 OFFSET $3`,
 			args:   []any{"%fr%", int64(100), int64(0)},
 		},
+		{
+			name: "IN argument order",
+			def:  usersList, req: easylist.Request{Limit: intp(10), Offset: intp(0)},
+			filter: "status IN ('a', NULL, 'b') AND age < 30",
+			sql:    `SELECT u."id" AS "id" FROM users AS u WHERE (COALESCE(u."status" IN ($1, $2), TRUE) AND u."age" < $3) ORDER BY u."id" ASC LIMIT $4 OFFSET $5`,
+			args:   []any{"a", "b", int64(30), int64(10), int64(0)},
+		},
+		{
+			name: "IN with only NULL",
+			def:  usersList, req: easylist.Request{Limit: intp(10), Offset: intp(0)},
+			filter: "status IN (NULL) AND name NOT IN (NULL)",
+			sql:    `SELECT u."id" AS "id" FROM users AS u WHERE (u."status" IS NULL AND u."name" IS NOT NULL) ORDER BY u."id" ASC LIMIT $1 OFFSET $2`,
+			args:   []any{int64(10), int64(0)},
+		},
+		{
+			name: "NOT IN on a joined field",
+			def:  usersList, req: easylist.Request{},
+			filter: "country NOT IN ('FR', 'DE')",
+			sql:    `SELECT u."id" AS "id" FROM users AS u LEFT JOIN countries c ON c.id = u.country_id WHERE COALESCE((c.name) NOT IN ($1, $2), TRUE) ORDER BY u."id" ASC LIMIT $3 OFFSET $4`,
+			args:   []any{"FR", "DE", int64(100), int64(0)},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -192,6 +215,13 @@ func TestCompileArrays(t *testing.T) {
 			args:   []any{"ok", "passed", int64(10), int64(0)},
 		},
 		{
+			name: "CONTAINS list value",
+			kind: easylist.KindPage, req: easylist.Request{Fields: []string{"statuses"}, Limit: intp(10), Offset: intp(0)},
+			filter: "statuses CONTAINS ('ok', 'passed')",
+			sql:    `SELECT u."id" AS "id", to_json(u."statuses")::text AS "statuses" FROM runs AS u WHERE ($1 = ANY(u."statuses") AND $2 = ANY(u."statuses")) ORDER BY u."id" ASC LIMIT $3 OFFSET $4`,
+			args:   []any{"ok", "passed", int64(10), int64(0)},
+		},
+		{
 			name: "EXCLUDES and NULL test",
 			kind: easylist.KindPage, req: easylist.Request{},
 			filter: "tags EXCLUDES 'go' AND labels != NULL",
@@ -213,6 +243,46 @@ func TestCompileArrays(t *testing.T) {
 				t.Errorf("got\n%s\n%#v\nwant\n%s\n%#v", sql, args, tc.sql, tc.args)
 			}
 		})
+	}
+}
+
+// A list value compiles to the same SQL and arguments as the quoted form it
+// can replace.
+func TestCompileListFormsMatchStringForms(t *testing.T) {
+	for _, tc := range []struct {
+		def          easylist.List
+		list, quoted string
+	}{
+		{arraysList, "statuses CONTAINS ('ok', 'passed')", "statuses CONTAINS 'ok,passed'"},
+		{usersList, "age BETWEEN (30, 40)", "age BETWEEN '30,40'"},
+	} {
+		t.Run(tc.list, func(t *testing.T) {
+			listSQL, listArgs := compile(t, tc.def, easylist.KindPage, easylist.Request{}, tc.list)
+			quotedSQL, quotedArgs := compile(t, tc.def, easylist.KindPage, easylist.Request{}, tc.quoted)
+			if listSQL != quotedSQL || !reflect.DeepEqual(listArgs, quotedArgs) {
+				t.Errorf("got\n%s\n%#v\nwant\n%s\n%#v", listSQL, listArgs, quotedSQL, quotedArgs)
+			}
+		})
+	}
+}
+
+// IN binds enum items as plain arguments, so PostgreSQL infers the enum type
+// from the column and the SQL names no type.
+func TestCompileEnumIn(t *testing.T) {
+	def := easylist.List{
+		Name: "accounts", Table: "accounts", Alias: "a", PrimaryKey: "id",
+		Fields: []easylist.Field{
+			{Name: "id", Type: easylist.Integer},
+			{Name: "status", Type: easylist.Enum, Values: []string{"active", "blocked"}},
+		},
+	}
+	sql, args := compile(t, def, easylist.KindCount, easylist.Request{}, "status IN ('active', 'blocked')")
+	want := `SELECT COUNT(*) FROM accounts AS a WHERE a."status" IN ($1, $2)`
+	if sql != want || !reflect.DeepEqual(args, []any{"active", "blocked"}) {
+		t.Errorf("got\n%s\n%#v\nwant\n%s", sql, args, want)
+	}
+	if strings.Contains(sql, "::") {
+		t.Errorf("enum list has a cast: %s", sql)
 	}
 }
 

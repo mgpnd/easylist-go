@@ -73,19 +73,21 @@ Each join must return at most one row per base row. Use a `LEFT JOIN` on a uniqu
 
 | Type | Go value | Filter operators |
 | --- | --- | --- |
-| `Text` | `string` | `=`, `!=`, `CONTAINS`, `EXCLUDES` |
-| `Integer` | `int64` | `=`, `!=`, `>`, `>=`, `<`, `<=`, `BETWEEN` |
+| `Text` | `string` | `=`, `!=`, `IN`, `NOT IN`, `CONTAINS`, `EXCLUDES` |
+| `Integer` | `int64` | `=`, `!=`, `IN`, `NOT IN`, `>`, `>=`, `<`, `<=`, `BETWEEN` |
 | `Float` | `float64` | same as `Integer` |
 | `Numeric` | `string` (exact decimal text) | same as `Integer` |
-| `Boolean` | `bool` | `=`, `!=` |
+| `Boolean` | `bool` | `=`, `!=`, `IN`, `NOT IN` |
 | `Date` | `time.Time` | same as `Integer` |
 | `Timestamp` | `time.Time` | same as `Integer` |
-| `UUID` | `string` | `=`, `!=` |
-| `Enum` | `string` (a declared value) | `=`, `!=` |
+| `UUID` | `string` | `=`, `!=`, `IN`, `NOT IN` |
+| `Enum` | `string` (a declared value) | `=`, `!=`, `IN`, `NOT IN` |
 
 Every type also accepts `= NULL` and `!= NULL`, whether or not the field is declared `Nullable`.
 
 A NULL is an absent value. A NULL in a field not declared `Nullable` fails the request with an error naming the field, which usually points at a join or definition mistake. Filters compare with NULL through the `NULL` keyword: `country = NULL` matches rows where `country` is NULL, and `country != NULL` matches rows where it is not. `!=` matches exactly the rows `=` does not, so `country != 'FR'` also matches rows where `country` is NULL; add `AND country != NULL` to leave them out. `EXCLUDES` matches rows that do not contain its value case-insensitively, and rows where the field is NULL. The other operators never match NULL.
+
+`IN` takes a parenthesized list and matches the rows that `=` would match for any item, so `status IN ('active', 'blocked')` is `status = 'active' OR status = 'blocked'`. A `NULL` item matches rows where the field is NULL, as in `status IN ('active', NULL)`. `NOT IN` matches the rows that `!=` would match for every item, so rows where the field is NULL match it unless the list contains `NULL`: `country NOT IN ('FR', 'DE')` matches rows where `country` is NULL, and `country NOT IN ('FR', NULL)` does not. Each item is converted to the field type like the value of `=`.
 
 ## Arrays
 
@@ -110,7 +112,9 @@ Array fields cannot be the primary key or be sorted on. They accept only these f
 - `tags EXCLUDES 'go'` matches rows whose array has no element equal to `go`, including empty arrays and rows where `tags` is NULL.
 - `tags = NULL` and `tags != NULL` test whether the array is NULL. An empty array is not NULL.
 
-On an array field a quoted string is always a comma-separated list. Items are trimmed, an empty item is an error, and each item is converted to the element type, so `ids CONTAINS '7, 8'` lists the integers 7 and 8. A list after `CONTAINS` matches rows whose array holds every listed value; a list after `EXCLUDES` leaves out rows whose array holds any of them. A single unquoted number or boolean, as in `ids CONTAINS 7`, is one value. There is no way to match an element that contains a comma. Scalar text fields keep their substring `CONTAINS` and `EXCLUDES`, with no list splitting.
+`CONTAINS` and `EXCLUDES` on an array also take a parenthesized list, as in `tags CONTAINS ('a,b', 'c')`. Its items are never split or trimmed, so this is how to match an element that contains a comma, and each item is converted to the element type, so `ids CONTAINS (7, 8)` lists the integers 7 and 8. A list after `CONTAINS` matches rows whose array holds every listed value; a list after `EXCLUDES` leaves out rows whose array holds any of them.
+
+On an array field a quoted string is also a comma-separated list. Items are trimmed, an empty item is an error, and each item is converted to the element type, so `ids CONTAINS '7, 8'` is the same as `ids CONTAINS (7, 8)`. A single unquoted number or boolean, as in `ids CONTAINS 7`, is one value. Scalar text fields keep their substring `CONTAINS` and `EXCLUDES`, with no list splitting, and reject a parenthesized list. `IN` and `NOT IN` are rejected on arrays.
 
 Drivers learn which fields are arrays from `PlanField.Array`. They select each array as JSON array text, or SQL NULL for a NULL array, and the runtime decodes it with `encoding/json`. Elements are JSON strings for text, enum, uuid, dates (`YYYY-MM-DD`), and timestamps (ISO 8601, read as UTC when there is no offset); numbers for integer, float, and numeric; and booleans for boolean. Float elements may also be the strings `NaN`, `Infinity`, and `-Infinity`, and numeric elements the string `NaN`.
 

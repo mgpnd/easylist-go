@@ -63,6 +63,14 @@ var docCorpusAccepted = []string{
 	`a = {-(TODAY + 1::DAYS) * 2}`, `a = {0::BUSINESS_DAYS}`, `age > -3 AND x = {1} AND y < +2`,
 	`a = {NOW + 10000001::MINUTES}`, `a = {1 / (2 - 2)}`, `a = {10 / 4 - 0.1}`,
 	`a = {(2::DAYS + 3::HOURS) / 2}`, `a = {TODAY + 9::HOURS}`,
+	// Lists: filter-parsing and contract-filter-ast scenarios, then edge cases.
+	`status IN ('success', 'pending')`, `status NOT IN ('error')`, `status IN ('success', 'pending', NULL)`,
+	`x IN ('a', 1, TRUE)`, `status in ('a')`, `status not In ('a')`, `status IN ('a')`, `status NOT IN ('a')`,
+	`status IN ('a', null)`, `tags CONTAINS ('a,b', 'c')`, `tags EXCLUDES ('x')`, `tags CONTAINS 'a,b'`,
+	`age BETWEEN (30, 40)`, `age BETWEEN '30,40'`, `"in" = 'x'`, `"in" = 'x' AND "NOT" IN ('y')`,
+	`tags CONTAINS (' a ', 1.50, false)`, `x NOT IN (NULL)`, `x IN (NULL, null)`, `x BETWEEN ('2026-01-01', -1)`,
+	"x IN(\t'it''s' ,'b' )", `x NOT  in('a')`, `(status IN ('a') AND x NOT IN (1, 2)) OR tags CONTAINS ('z')`,
+	`(a = 1 OR b != 'x') AND c BETWEEN '1,2' AND d NOT IN ('x', NULL)`, `a IN ('x')`, `"not" NOT IN ('in')`,
 }
 
 // docCorpusRejected lists filters both must reject, in addition to the
@@ -80,6 +88,10 @@ var docCorpusRejected = []string{
 	`a = {1.5::DAYS}`, `a = {-1::}`, `a = {::DAYS}`, `a CONTAINS NOW`, `a EXCLUDES {NOW}`,
 	`a = {now()}`, `a = {x}`, `a = {1 * * 2}`, `a = {(1 + 2}`, `a = {1 + 2)}`, `a = {1}}`, `}`,
 	`a = 1 * 2`, `a = 1 / 2`, `a = 5::DAYS`,
+	// Lists.
+	`x NOT IN ()`, `x IN ('a') AND`, `x CONTAINS ('a', {1})`, `x BETWEEN (1, 2, 3)`, `x BETWEEN (TODAY, NOW)`,
+	`x EXCLUDES (NULL)`, `x IN ('a') NOT`, `x = 1, 2`, `x IN ('a', 'b'`, `x IN 'a', 'b'`, `x NOT BETWEEN (1, 2)`,
+	`x NOT CONTAINS ('a')`, `in IN ('a')`, `x IN (1) IN (2)`, `x = NULL, NULL`,
 }
 
 func TestGrammarDocMatchesParser(t *testing.T) {
