@@ -2,6 +2,7 @@ package easylist
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -360,6 +361,27 @@ func TestPlanValues(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// List values hold no expressions, so they plan with no evaluated values and
+// need no reference time.
+func TestPlanListValues(t *testing.T) {
+	expr := parse(t, "status IN ('a', NULL) AND country NOT IN ('FR')")
+	p, err := mustUsers(t).Plan(KindCount, Request{Filter: expr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.values) != 0 {
+		t.Errorf("values = %v, want none", p.values)
+	}
+	for _, pred := range predicates(expr) {
+		if v, ok := p.Value(pred); ok {
+			t.Errorf("%s has value %+v", pred.Field(), v)
+		}
+	}
+	if got := joinKeys(p); !slices.Equal(got, []string{"country"}) {
+		t.Errorf("joins = %v, want [country]", got)
+	}
 }
 
 func TestPlanRejectsInvalidWeekStart(t *testing.T) {
