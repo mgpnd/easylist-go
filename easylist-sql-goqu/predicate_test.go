@@ -118,6 +118,15 @@ func TestBuildPredicateTypesAndOperators(t *testing.T) {
 		{"price BETWEEN '1.01,2.02'", `t."price" BETWEEN $1::numeric AND $2::numeric`, []any{"1.01", "2.02"}},
 		{"day BETWEEN '2024-02-29,2025-01-01'", `t."day" BETWEEN $1 AND $2`, []any{day, end}},
 		{"at BETWEEN '2026-01-01T00:00:00Z, 2026-02-01T00:00:00Z'", `t."at" BETWEEN $1 AND $2`, []any{at, atEnd}},
+		{"age BETWEEN (40, 30)", `t."age" BETWEEN $1 AND $2`, []any{int64(40), int64(30)}},
+		{"score BETWEEN (-1.5, 2.5)", `t."score" BETWEEN $1 AND $2`, []any{float64(-1.5), float64(2.5)}},
+		{"price BETWEEN (1.01, 2.02)", `t."price" BETWEEN $1::numeric AND $2::numeric`, []any{"1.01", "2.02"}},
+		{"day BETWEEN ('2024-02-29', '2025-01-01')", `t."day" BETWEEN $1 AND $2`, []any{day, end}},
+		{"at BETWEEN ('2026-01-01T00:00:00Z', '2026-02-01T00:00:00Z')", `t."at" BETWEEN $1 AND $2`, []any{at, atEnd}},
+		{"active IN (TRUE)", `t."active" IN ($1)`, []any{true}},
+		{"uid NOT IN ('7f1c0d2e-0000-4000-8000-000000000000')", `COALESCE(t."uid" NOT IN ($1), TRUE)`, []any{"7f1c0d2e-0000-4000-8000-000000000000"}},
+		{"status IN ('active', NULL)", `COALESCE(t."status" IN ($1), TRUE)`, []any{"active"}},
+		{"status NOT IN ('blocked', NULL, 'blocked')", `COALESCE(t."status" NOT IN ($1, $2), FALSE)`, []any{"blocked", "blocked"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
@@ -149,14 +158,14 @@ func TestBuildPredicateNull(t *testing.T) {
 	}
 }
 
-// nullOperator rewrites a parsed NULL predicate's operator, which the parser
-// itself never allows.
-type nullOperator struct {
+// rewrittenOperator rewrites a parsed predicate's operator, to build trees the
+// parser itself never produces, such as a NULL value after >.
+type rewrittenOperator struct {
 	filter.Predicate
 	op filter.PredicateOp
 }
 
-func (n nullOperator) Operator() filter.PredicateOp { return n.op }
+func (r rewrittenOperator) Operator() filter.PredicateOp { return r.op }
 
 func TestBuildPredicateRejectsNullWithOtherOperators(t *testing.T) {
 	for _, tc := range []struct {
@@ -168,7 +177,7 @@ func TestBuildPredicateRejectsNullWithOtherOperators(t *testing.T) {
 		{"name", filter.OpContains, "CONTAINS"}, {"name", filter.OpExcludes, "EXCLUDES"},
 	} {
 		t.Run(tc.field+" "+tc.text, func(t *testing.T) {
-			node := nullOperator{parsePredicate(t, tc.field+" = NULL"), tc.op}
+			node := rewrittenOperator{parsePredicate(t, tc.field+" = NULL"), tc.op}
 			expr, err := buildPredicate(predicatePlan(t), node)
 			pos := fmt.Sprintf("position %d", len(tc.field)+2)
 			if expr != nil || err == nil {
@@ -273,6 +282,10 @@ func TestBuildPredicateRejectsOperators(t *testing.T) {
 		{"status CONTAINS 'act'", "CONTAINS", "status", "position 8"},
 		{"day CONTAINS '2024-01-01'", "CONTAINS", "day", "position 5"},
 		{"at CONTAINS '2024'", "CONTAINS", "at", "position 4"},
+		{"age CONTAINS (1, 2)", "CONTAINS", "age", "position 5"},
+		{"status EXCLUDES ('active')", "EXCLUDES", "status", "position 8"},
+		{"active BETWEEN (TRUE, FALSE)", "BETWEEN", "active", "position 8"},
+		{"name BETWEEN ('a', 'b')", "BETWEEN", "name", "position 6"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
@@ -334,6 +347,18 @@ func TestBuildPredicateArrays(t *testing.T) {
 		{"tags = NULL", `WHERE t."tags" IS NULL`, []any{}},
 		{"statuses != NULL", `WHERE t."statuses" IS NOT NULL`, []any{}},
 		{"labels = NULL", `WHERE (l.names) IS NULL`, []any{}},
+		// List values give one value per item, never split or trimmed.
+		{"tags CONTAINS ('a,b', ' c')", `WHERE ($1 = ANY(t."tags") AND $2 = ANY(t."tags"))`, []any{"a,b", " c"}},
+		{"tags EXCLUDES ('go')", `WHERE COALESCE(NOT ($1 = ANY(t."tags")), TRUE)`, []any{"go"}},
+		{"ids CONTAINS (7, -8)", `WHERE ($1 = ANY(t."ids") AND $2 = ANY(t."ids"))`, []any{int64(7), int64(-8)}},
+		{"scores EXCLUDES (1.5)", `WHERE COALESCE(NOT ($1 = ANY(t."scores")), TRUE)`, []any{1.5}},
+		{"prices CONTAINS (10.50, 1)", `WHERE ($1::numeric = ANY(t."prices") AND $2::numeric = ANY(t."prices"))`, []any{"10.50", "1"}},
+		{"flags CONTAINS (TRUE, false)", `WHERE ($1 = ANY(t."flags") AND $2 = ANY(t."flags"))`, []any{true, false}},
+		{"days CONTAINS ('2024-02-29')", `WHERE ($1 = ANY(t."days"))`, []any{day}},
+		{"seen EXCLUDES ('2026-01-01T00:00:00Z')", `WHERE COALESCE(NOT ($1 = ANY(t."seen")), TRUE)`, []any{at}},
+		{"groups CONTAINS ('0B6C4C1E-3D8E-4F43-9D5A-2A8A0D1D2C3B')", `WHERE ($1 = ANY(t."groups"))`, []any{"0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b"}},
+		{"statuses EXCLUDES ('skipped', 'failed')", `WHERE COALESCE(NOT ($1 = ANY(t."statuses") OR $2 = ANY(t."statuses")), TRUE)`, []any{"skipped", "failed"}},
+		{"labels CONTAINS ('x')", `WHERE ($1 = ANY((l.names)))`, []any{"x"}},
 		// Scalar text fields keep the substring search and never split lists.
 		{"name CONTAINS 'a,b'", `WHERE t."name" ILIKE $1 ESCAPE E'\\'`, []any{"%a,b%"}},
 		{"name EXCLUDES 'a,b'", `WHERE COALESCE(t."name" NOT ILIKE $1 ESCAPE E'\\', TRUE)`, []any{"%a,b%"}},
@@ -364,6 +389,9 @@ func TestBuildPredicateRejectsArrayOperators(t *testing.T) {
 		{"statuses = 'ok'", "=", "statuses", "position 10"},
 		{"flags = TRUE", "=", "flags", "position 7"},
 		{"labels != 'x'", "!=", "labels", "position 8"},
+		{"tags IN ('go')", "IN", "tags", "position 6"},
+		{"ids NOT IN (1, NULL)", "NOT IN", "ids", "position 5"},
+		{"statuses IN (NULL)", "IN", "statuses", "position 10"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
@@ -404,6 +432,157 @@ func TestBuildPredicateRejectsArrayValues(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
 			expr, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			if expr != nil || err == nil {
+				t.Fatalf("want an error, got %#v", expr)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %s", err, want)
+				}
+			}
+		})
+	}
+}
+
+// IN and NOT IN compile to the four forms of design.md on every scalar type.
+// Only non-NULL items are bound, in list order, and the field's SQL is emitted
+// once.
+func TestBuildPredicateIn(t *testing.T) {
+	day := time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	types := []struct {
+		field, column, items, list string
+		args                       []any
+	}{
+		{"name", `t."name"`, "'a', 'O''Reilly'", "$1, $2", []any{"a", "O'Reilly"}},
+		{"full", `(t.first || ' ' || t.last)`, "'Ann Lee'", "$1", []any{"Ann Lee"}},
+		{"age", `t."age"`, "30, -1", "$1, $2", []any{int64(30), int64(-1)}},
+		{"score", `t."score"`, "1.5, 2", "$1, $2", []any{1.5, float64(2)}},
+		{"price", `t."price"`, "1.01, 12345678901234567890.1", "$1::numeric, $2::numeric", []any{"1.01", "12345678901234567890.1"}},
+		{"active", `t."active"`, "TRUE, false", "$1, $2", []any{true, false}},
+		{"day", `t."day"`, "'2024-02-29', '2025-01-01'", "$1, $2", []any{day, end}},
+		{"at", `t."at"`, "'2026-01-01T00:00:00Z'", "$1", []any{at}},
+		{"uid", `t."uid"`, "'0B6C4C1E-3D8E-4F43-9D5A-2A8A0D1D2C3B'", "$1", []any{"0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b"}},
+		{"status", `t."status"`, "'active', 'blocked'", "$1, $2", []any{"active", "blocked"}},
+	}
+	forms := []struct{ op, null, clause string }{
+		{"IN", "", "%s IN (%s)"},
+		{"IN", "NULL, ", "COALESCE(%s IN (%s), TRUE)"},
+		{"NOT IN", "", "COALESCE(%s NOT IN (%s), TRUE)"},
+		{"NOT IN", "null, ", "COALESCE(%s NOT IN (%s), FALSE)"},
+	}
+	for _, typ := range types {
+		for _, form := range forms {
+			input := typ.field + " " + form.op + " (" + form.null + typ.items + ")"
+			t.Run(input, func(t *testing.T) {
+				sql, args := renderPredicate(t, input)
+				want := "WHERE " + fmt.Sprintf(form.clause, typ.column, typ.list)
+				if !strings.HasSuffix(sql, want) || !reflect.DeepEqual(args, typ.args) || strings.Count(sql, typ.column) != 1 {
+					t.Fatalf("got %q %#v; want suffix %q args %#v and the field once", sql, args, want, typ.args)
+				}
+			})
+		}
+		// A list of only NULL items binds nothing, and the enum's declared
+		// values are not consulted.
+		for _, tc := range []struct{ input, clause string }{
+			{typ.field + " IN (NULL)", "IS NULL"},
+			{typ.field + " NOT IN (NULL, null)", "IS NOT NULL"},
+		} {
+			t.Run(tc.input, func(t *testing.T) {
+				sql, args := renderPredicate(t, tc.input)
+				if want := "WHERE " + typ.column + " " + tc.clause; !strings.HasSuffix(sql, want) || len(args) != 0 {
+					t.Fatalf("got %q %#v; want suffix %q and no args", sql, args, want)
+				}
+			})
+		}
+	}
+}
+
+// A list value compiles like the quoted form it can replace.
+func TestBuildPredicateListFormsMatchStringForms(t *testing.T) {
+	for _, tc := range []struct{ list, quoted string }{
+		{"age BETWEEN (30, 40)", "age BETWEEN '30,40'"},
+		{"price BETWEEN (1.01, 2.02)", "price BETWEEN ' 1.01 , 2.02'"},
+		{"day BETWEEN ('2024-02-29', '2025-01-01')", "day BETWEEN '2024-02-29, 2025-01-01'"},
+		{"statuses CONTAINS ('ok', 'skipped')", "statuses CONTAINS 'ok,skipped'"},
+		{"ids EXCLUDES (7, 8)", "ids EXCLUDES '7, 8'"},
+	} {
+		t.Run(tc.list, func(t *testing.T) {
+			listSQL, listArgs := renderPredicate(t, tc.list)
+			quotedSQL, quotedArgs := renderPredicate(t, tc.quoted)
+			if listSQL != quotedSQL || !reflect.DeepEqual(listArgs, quotedArgs) {
+				t.Fatalf("got %q %#v; want %q %#v", listSQL, listArgs, quotedSQL, quotedArgs)
+			}
+		})
+	}
+}
+
+// List errors report the offending item's position, or the list's position
+// when the list as a whole is rejected.
+func TestBuildPredicateRejectsListValues(t *testing.T) {
+	cases := []struct {
+		filter string
+		want   []string
+	}{
+		{"status IN ('active', 'archived')", []string{`"archived"`, "not a declared value", `"status"`, "position 22"}},
+		{"status NOT IN ('Active')", []string{`"Active"`, "position 16"}},
+		{"age IN (1, '30')", []string{`"30"`, `"age"`, "position 12"}},
+		{"age NOT IN (1.5)", []string{`"1.5"`, "position 13"}},
+		{"active IN ('true')", []string{`"true"`, "position 12"}},
+		{"name IN (1)", []string{`"1"`, "position 10"}},
+		{"uid IN ('not-a-uuid')", []string{`"not-a-uuid"`, "position 9"}},
+		{"day IN ('2024-02-29', ' 2025-01-01')", []string{`" 2025-01-01"`, "position 23"}},
+		{"at IN ('2026-01-01T00:00:00')", []string{"offset", "position 8"}},
+		{"age BETWEEN ('30', '40')", []string{`"30"`, `"age"`, "position 14"}},
+		{"age BETWEEN (30, 40.5)", []string{`"40.5"`, "position 18"}},
+		{"day BETWEEN (' 2024-02-29', '2025-01-01')", []string{`" 2024-02-29"`, "position 14"}},
+		{"at BETWEEN ('2026-01-01T00:00:00Z', '2026-02-01')", []string{`"2026-02-01"`, "position 37"}},
+		{"ids CONTAINS (7, 'x')", []string{`"x"`, `"ids"`, "position 18"}},
+		{"ids CONTAINS (7, 8.5)", []string{`"8.5"`, "position 18"}},
+		{"statuses EXCLUDES ('skipped', 'archived')", []string{`"archived"`, "not a declared value", "position 31"}},
+		{"tags CONTAINS (1)", []string{`"tags"`, "position 16"}},
+		{"flags CONTAINS ('true')", []string{`"true"`, "position 17"}},
+		{"name CONTAINS ('a', 'b')", []string{"value list", `"name"`, "position 15"}},
+		{"name EXCLUDES ('a')", []string{"value list", `"EXCLUDES"`, `"name"`, "position 15"}},
+		{"full CONTAINS ('Lee')", []string{"value list", `"full"`, "position 15"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter, func(t *testing.T) {
+			expr, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			if expr != nil || err == nil {
+				t.Fatalf("want an error, got %#v", expr)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %s", err, want)
+				}
+			}
+		})
+	}
+}
+
+// Trees the parser never produces fail with an error rather than a panic or
+// invalid SQL.
+func TestBuildPredicateRejectsRewrittenLists(t *testing.T) {
+	cases := []struct {
+		filter string
+		op     filter.PredicateOp
+		want   []string
+	}{
+		{"age = 1", filter.OpIn, []string{`"IN"`, "value list", `"age"`, "position 7"}},
+		{"name = 'a'", filter.OpNotIn, []string{`"NOT IN"`, "value list", `"name"`, "position 8"}},
+		{"age IN (1, 2)", filter.OpEq, []string{`"(1, 2)"`, "position 8"}},
+		{"age IN (1, 2)", filter.OpGt, []string{`"(1, 2)"`, "position 8"}},
+		{"age IN (1)", filter.OpBetween, []string{"two bounds", "position 8"}},
+		{"age IN (1, 2, 3)", filter.OpBetween, []string{"two bounds", "position 8"}},
+		{"age IN (1, NULL)", filter.OpBetween, []string{"NULL item", `"age"`, "position 12"}},
+		{"tags IN ('a', NULL)", filter.OpContains, []string{"NULL item", `"tags"`, "position 15"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter+" as "+operatorText[tc.op], func(t *testing.T) {
+			node := rewrittenOperator{parsePredicate(t, tc.filter), tc.op}
+			expr, err := buildPredicate(predicatePlan(t), node)
 			if expr != nil || err == nil {
 				t.Fatalf("want an error, got %#v", expr)
 			}

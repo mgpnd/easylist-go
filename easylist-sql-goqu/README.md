@@ -65,13 +65,26 @@ List-author SQL must not contain `$n` placeholders of its own, because they woul
 
 - `!=` compiles to `IS DISTINCT FROM`, so it matches exactly the rows `=` does not, including rows whose field is NULL. To skip NULL rows as `<>` did, add `AND x != NULL`, as in `country != 'FR' AND country != NULL`.
 - `= NULL` compiles to `IS NULL` and `!= NULL` to `IS NOT NULL`, with no bound argument. Every type accepts them, whether or not the field is declared `Nullable`.
+- `IN` and `NOT IN` bind each non-NULL item once, in list order, inside an SQL list, so PostgreSQL infers each argument's type from the column as it does for `=`, and an enum list needs no cast. A `NULL` item is never bound or placed in the SQL list. With `L` the bound items, such as `$1, $2`, the field's SQL is emitted once:
+
+  | Filter | SQL |
+  | --- | --- |
+  | `x IN (L)` | `x IN (L)` |
+  | `x IN (L, NULL)` | `COALESCE(x IN (L), TRUE)` |
+  | `x NOT IN (L)` | `COALESCE(x NOT IN (L), TRUE)` |
+  | `x NOT IN (L, NULL)` | `COALESCE(x NOT IN (L), FALSE)` |
+  | `x IN (NULL)` | `x IS NULL` |
+  | `x NOT IN (NULL)` | `x IS NOT NULL` |
+
+  A `NULL` item may be anywhere in the list, and a list of only `NULL` items compiles like `(NULL)`. So a NULL field matches `IN` only when the list holds `NULL`, and `NOT IN` only when it does not. This differs from writing `NULL` inside an SQL `NOT IN` list, which matches no rows at all. Numeric items keep their `::numeric` cast, as in `x IN ($1::numeric, $2::numeric)`.
 - `CONTAINS` on text compiles to `ILIKE '%…%' ESCAPE E'\\'`: case-insensitive, with `%`, `_`, and `\` in the literal matched literally.
+- `CONTAINS` and `EXCLUDES` on text reject a parenthesized list with an error naming the field at the `(`.
 - `EXCLUDES` on text compiles to `COALESCE(x NOT ILIKE '%…%' ESCAPE E'\\', TRUE)`, with the same escaping as `CONTAINS`. It matches rows that do not contain the literal and rows whose field is NULL, and emits the field's SQL once.
 - `>`, `>=`, `<`, `<=`, `BETWEEN`, and `CONTAINS` never match a NULL field.
 - Numeric literals are bound as exact decimal strings and cast with `::numeric`.
 - Boolean equality compares with a bound `true` or `false` rather than emitting `IS TRUE`.
 - Dates (`YYYY-MM-DD`) and timestamps (RFC 3339 with an offset) are bound as `time.Time`. UUIDs (canonical hyphenated hex) and enums (a declared value) are bound as strings; PostgreSQL infers their type from the column.
-- `BETWEEN 'a,b'` is inclusive, with spaces around each bound trimmed.
+- `BETWEEN 'a,b'` is inclusive, with spaces around each bound trimmed. `BETWEEN (a, b)` compiles to the same `x BETWEEN $1 AND $2`, but each bound keeps the kind it was written as, is converted like the value of `=`, and is not trimmed: `age BETWEEN (30, 40)` binds the integers 30 and 40, `due BETWEEN ('2026-01-01', '2026-02-01')` binds two dates, and `age BETWEEN ('30', '40')` fails at the first bound because it is a string.
 - NULL ordering follows PostgreSQL defaults: last when ascending, first when descending.
 
 Expression values (`TODAY`, `NOW`, `{TODAY + 5::DAYS}`, `{10 / 4}`, ...):
@@ -98,9 +111,10 @@ Array fields:
 
 - An array field is selected as `to_json(x)::text AS "name"`, so the runtime receives JSON array text and a NULL array stays NULL. The `::text` cast makes every `database/sql` driver return a string.
 - On an array field a quoted literal is a comma-separated list: `ids CONTAINS '7, 8'` binds the integers `7` and `8`. Items are trimmed, an empty item is an error, and each item is checked like a scalar literal of the element type, so a list on an enum array accepts only declared values. An unquoted number or boolean is one value, as in `ids CONTAINS 7`.
+- A parenthesized list gives one value per item, never split or trimmed: `tags CONTAINS ('a,b', ' c')` binds `a,b` and ` c`. Each item keeps the kind it was written as and is checked like a scalar literal of the element type, with errors at the item's position, so `ids CONTAINS (7, 'x')` fails at `'x'`. Otherwise it compiles like the quoted form: `statuses CONTAINS ('ok', 'passed')` produces the same SQL and arguments as `statuses CONTAINS 'ok,passed'`.
 - `CONTAINS` binds each value once and compiles to `($1 = ANY(x) AND $2 = ANY(x))`: the array must hold every value, compared exactly and case-sensitively. A NULL array never matches.
 - `EXCLUDES` compiles to `COALESCE(NOT ($1 = ANY(x) OR $2 = ANY(x)), TRUE)`: the array must hold none of the values. Empty arrays and NULL arrays match.
-- `= NULL` and `!= NULL` compile to `IS NULL` and `IS NOT NULL` as for scalars. An empty array is not NULL. Every other operator is rejected on arrays.
+- `= NULL` and `!= NULL` compile to `IS NULL` and `IS NOT NULL` as for scalars. An empty array is not NULL. Every other operator, `IN` and `NOT IN` included, is rejected on arrays.
 - `= ANY` lets PostgreSQL infer each argument's type from the column's element type, so the same filter works on `int4[]` and `int8[]`, `varchar[]` and `text[]`, and PostgreSQL enum arrays, with no array cast. Numeric values keep their `::numeric` cast.
 - A list of N values repeats the field's SQL N times. These predicates cannot use GIN array indexes, so they scan the rows the other conditions leave.
 
