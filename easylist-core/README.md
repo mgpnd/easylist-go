@@ -1,6 +1,6 @@
 # easylist-core
 
-`easylist-core` (package `easylist`) lets an application declare a list once, as a Go value, and then plan and run requests against it: selected fields, a filter from [easylist-filter](../easylist-filter), sorting, and pagination. The planner joins only what a request uses. SQL itself comes from a driver such as [easylist-sql-goqu](../easylist-sql-goqu), GraphQL from [easylist-gqlgen](../easylist-gqlgen), and file exports from [easylist-export](../easylist-export).
+`easylist-core` (package `easylist`) lets an application declare a list once, as a Go value, and then plan and run requests against it: selected fields, a filter from [easylist-filter](../easylist-filter), sorting, and pagination. The planner joins only what a request uses. SQL itself comes from one of the [drivers](#drivers), GraphQL from [easylist-gqlgen](../easylist-gqlgen), and file exports from [easylist-export](../easylist-export).
 
 The module uses only the standard library and `easylist-filter`.
 
@@ -117,6 +117,21 @@ Array fields cannot be the primary key or be sorted on. They accept only these f
 On an array field a quoted string is also a comma-separated list. Items are trimmed, an empty item is an error, and each item is converted to the element type, so `ids CONTAINS '7, 8'` is the same as `ids CONTAINS (7, 8)`. A single unquoted number or boolean, as in `ids CONTAINS 7`, is one value. Scalar text fields keep their substring `CONTAINS` and `EXCLUDES`, with no list splitting, and reject a parenthesized list. `IN` and `NOT IN` are rejected on arrays.
 
 Drivers learn which fields are arrays from `PlanField.Array`. They select each array as JSON array text, or SQL NULL for a NULL array, and the runtime decodes it with `encoding/json`. Elements are JSON strings for text, enum, uuid, dates (`YYYY-MM-DD`), and timestamps (ISO 8601, read as UTC when there is no offset); numbers for integer, float, and numeric; and booleans for boolean. Float elements may also be the strings `NaN`, `Infinity`, and `-Infinity`, and numeric elements the string `NaN`.
+
+## Drivers
+
+A driver compiles plans into SQL for one query-building library. These drivers target PostgreSQL:
+
+| Module | Package | Library |
+| --- | --- | --- |
+| [easylist-sql-goqu](../easylist-sql-goqu) | `sqlgoqu` | goqu |
+| [easylist-sql-gorm](../easylist-sql-gorm) | `sqlgorm` | gorm |
+| [easylist-sql-ent](../easylist-sql-ent) | `sqlent` | ent |
+| [easylist-sql-bob](../easylist-sql-bob) | `sqlbob` | bob |
+| [easylist-sql-sqlbuilder](../easylist-sql-sqlbuilder) | `sqlsqlbuilder` | go-sqlbuilder |
+| [easylist-sql-jet](../easylist-sql-jet) | `sqljet` | jet |
+
+They compile the same plan to the same arguments, with the same Go types and in the same order, and the same errors, and their queries match the same rows. Only the SQL text's formatting differs. Pick the driver whose library the application already uses, so easylist adds no new query builder to its dependencies.
 
 ## Run requests
 

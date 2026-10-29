@@ -2,7 +2,7 @@
 
 ## 1. easylist-core
 
-- [ ] 1.1 Add a "Drivers" section to `easylist-core/README.md` that lists the six PostgreSQL drivers (`easylist-sql-goqu`, `-gorm`, `-ent`, `-bob`, `-sqlbuilder`, `-jet`), says they compile the same plans to the same arguments and matching rows, and says to pick the one whose library the application already uses. Verify `go test ./...` passes in `easylist-core`, including the README example tests
+- [x] 1.1 Add a "Drivers" section to `easylist-core/README.md` that lists the six PostgreSQL drivers (`easylist-sql-goqu`, `-gorm`, `-ent`, `-bob`, `-sqlbuilder`, `-jet`), says they compile the same plans to the same arguments and matching rows, and says to pick the one whose library the application already uses. Verify `go test ./...` passes in `easylist-core`, including the README example tests
 
 ## 2. easylist-sqlpg
 
