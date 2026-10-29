@@ -58,8 +58,8 @@
 
 ## 9. Workspace integration
 
-- [ ] 9.1 With a local PostgreSQL 16 running and `EASYLIST_PG_DSN` set, run `go vet ./...` and `go test -race ./...` in every module listed in `go.work`, and verify that all pass, that no conformance subtest is skipped, and that no `easylist_conf_` schema is left in the database
-- [ ] 9.2 Run `openspec validate add-postgres-library-drivers --strict` and verify it passes
+- [x] 9.1 With a local PostgreSQL 16 running and `EASYLIST_PG_DSN` set, run `go vet ./...` and `go test -race ./...` in every module listed in `go.work`, and verify that all pass, that no conformance subtest is skipped, and that no `easylist_conf_` schema is left in the database
+- [x] 9.2 Run `openspec validate add-postgres-library-drivers --strict` and verify it passes
 
 ## Workflow follow-up
 
