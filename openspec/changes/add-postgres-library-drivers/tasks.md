@@ -23,10 +23,10 @@
 
 ## 4. easylist-sql-gorm
 
-- [ ] 4.1 Create the `easylist-sql-gorm` module (package `sqlgorm`, requiring only `gorm.io/gorm`), add it to `go.work`, and add the private dialector from design.md (`BindVarTo` writing `$n`, `QuoteTo` writing `"name"`, default callbacks, no-op migrator and the other methods) with a package-level DryRun `*gorm.DB`. Verify `go build ./...` succeeds and `go list -deps` of the package contains no `gorm.io/driver/postgres` or pgx package
-- [ ] 4.2 Implement `New()` and `Compile`: a fresh `Session` per call, verbatim `TableExpr`, `clause.Select`/`Where`/`OrderBy` built from `clause.Expr` with author SQL as zero-var leaves, `And`/`Or` mapped to gorm's connectors, and `LIMIT $n OFFSET $m` appended by hand. Verify with golden tests for page, export, and count shape, offset 0, `IN` lists (pinning the `(?` handling), and author SQL containing `?`, plus a test that a separate gorm handle with a custom naming strategy and a plugin does not change the output
-- [ ] 4.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (gorm present; no goqu, bob, go-sqlbuilder, jet, ent, `gorm.io/driver/postgres`, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
-- [ ] 4.4 Write `easylist-sql-gorm/README.md` with usage alongside an existing gorm handle (the driver needs none) and a README example test like goqu's. Verify the example test passes
+- [x] 4.1 Create the `easylist-sql-gorm` module (package `sqlgorm`, requiring only `gorm.io/gorm`), add it to `go.work`, and add the private dialector from design.md (`BindVarTo` writing `$n`, `QuoteTo` writing `"name"`, default callbacks, no-op migrator and the other methods) with a package-level DryRun `*gorm.DB`. Verify `go build ./...` succeeds and `go list -deps` of the package contains no `gorm.io/driver/postgres` or pgx package
+- [x] 4.2 Implement `New()` and `Compile`: a fresh `Session` per call, verbatim `TableExpr`, `clause.Select`/`Where`/`OrderBy` built from `clause.Expr` with author SQL as zero-var leaves, `And`/`Or` mapped to gorm's connectors, and `LIMIT $n OFFSET $m` appended by hand. Verify with golden tests for page, export, and count shape, offset 0, `IN` lists (pinning the `(?` handling), and author SQL containing `?`, plus a test that a separate gorm handle with a custom naming strategy and a plugin does not change the output
+- [x] 4.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (gorm present; no goqu, bob, go-sqlbuilder, jet, ent, `gorm.io/driver/postgres`, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
+- [x] 4.4 Write `easylist-sql-gorm/README.md` with usage alongside an existing gorm handle (the driver needs none) and a README example test like goqu's. Verify the example test passes
 
 ## 5. easylist-sql-ent
 

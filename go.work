@@ -6,5 +6,6 @@ use (
 	./easylist-filter
 	./easylist-gqlgen
 	./easylist-sql-goqu
+	./easylist-sql-gorm
 	./easylist-sqlpg
 )
