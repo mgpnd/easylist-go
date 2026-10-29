@@ -37,10 +37,10 @@
 
 ## 6. easylist-sql-bob
 
-- [ ] 6.1 Create the `easylist-sql-bob` module (package `sqlbob`, requiring `github.com/stephenafamo/bob` at a pinned version) and add it to `go.work`. Verify `go build ./...` succeeds
-- [ ] 6.2 Implement `New()` and `Compile` with `psql.Select`: `sm.From(expr.Raw(from))`, columns and ordering from `expr.Raw` leaves, `sm.Where` with bob's `And`/`Or`, bound `sm.Limit`/`sm.Offset`, and predicates via `Fragment()` rendered with `psql.Raw` and `psql.Arg`. Map `Compare`, `IsNull`, `In`, and `Between` to bob's native operators only where a golden test shows the same arguments and no cast. Verify with golden tests for page, export, and count shape, offset 0, every node type, and a join containing `?`
-- [ ] 6.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (bob present; no goqu, go-sqlbuilder, jet, ent, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
-- [ ] 6.4 Write `easylist-sql-bob/README.md` with a README example test. Verify the example test passes
+- [x] 6.1 Create the `easylist-sql-bob` module (package `sqlbob`, requiring `github.com/stephenafamo/bob` at a pinned version) and add it to `go.work`. Verify `go build ./...` succeeds
+- [x] 6.2 Implement `New()` and `Compile` with `psql.Select`: `sm.From(expr.Raw(from))`, columns and ordering from `expr.Raw` leaves, `sm.Where` with bob's `And`/`Or`, bound `sm.Limit`/`sm.Offset`, and predicates via `Fragment()` rendered with `psql.Raw` and `psql.Arg`. Map `Compare`, `IsNull`, `In`, and `Between` to bob's native operators only where a golden test shows the same arguments and no cast. Verify with golden tests for page, export, and count shape, offset 0, every node type, and a join containing `?`
+- [x] 6.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (bob present; no goqu, go-sqlbuilder, jet, ent, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
+- [x] 6.4 Write `easylist-sql-bob/README.md` with a README example test. Verify the example test passes
 
 ## 7. easylist-sql-sqlbuilder
 
