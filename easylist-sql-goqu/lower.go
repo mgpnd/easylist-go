@@ -1,61 +1,43 @@
 package sqlgoqu
 
 import (
-	"fmt"
-
-	easylist "github.com/mgpnd/easylist-go/easylist-core"
-	filter "github.com/mgpnd/easylist-go/easylist-filter"
+	"github.com/mgpnd/easylist-go/easylist-sqlpg"
 
 	"github.com/doug-martin/goqu/v9"
 	"github.com/doug-martin/goqu/v9/exp"
 )
 
-// lowerFilter walks the public syntax tree in postorder without recursion.
-// Visiting left children first preserves validation and prepared argument order.
-func lowerFilter(p *easylist.Plan, root filter.Expr) (exp.Expression, error) {
-	if root == nil {
-		return nil, fmt.Errorf("empty filter syntax tree")
-	}
-	type frame struct {
-		node    filter.Expr
-		visited bool
-	}
-	frames := []frame{{node: root}}
-	var expressions []exp.Expression
-	for len(frames) > 0 {
-		current := frames[len(frames)-1]
-		frames = frames[:len(frames)-1]
-		switch node := current.node.(type) {
-		case filter.Predicate:
-			predicate, err := buildPredicate(p, node)
-			if err != nil {
-				return nil, err
-			}
-			expressions = append(expressions, predicate)
-		case filter.Logical:
-			if node.Operator() != filter.And && node.Operator() != filter.Or {
-				return nil, fmt.Errorf("invalid connector at position %d", node.OperatorPos())
-			}
-			if !current.visited {
-				frames = append(frames, frame{node: node, visited: true}, frame{node: node.Right()}, frame{node: node.Left()})
-				continue
-			}
-			if len(expressions) < 2 {
-				return nil, fmt.Errorf("incomplete expression at position %d", node.OperatorPos())
-			}
-			right, left := expressions[len(expressions)-1], expressions[len(expressions)-2]
-			expressions = expressions[:len(expressions)-2]
-			if node.Operator() == filter.And {
-				expressions = append(expressions, goqu.And(left, right))
-			} else {
-				expressions = append(expressions, goqu.Or(left, right))
-			}
-		default:
-			return nil, fmt.Errorf("invalid filter syntax tree")
+// condition maps a lowered condition onto goqu. And and Or become goqu's
+// connectors, which parenthesize both sides as their fragments do. Every
+// other node is rendered through its fragment, so the SQL is exactly the
+// canonical template; goqu has no native construct with the same output.
+func condition(c sqlpg.Cond) (exp.Expression, error) {
+	switch c := c.(type) {
+	case sqlpg.And:
+		left, right, err := conditions(c.Left, c.Right)
+		if err != nil {
+			return nil, err
 		}
+		return goqu.And(left, right), nil
+	case sqlpg.Or:
+		left, right, err := conditions(c.Left, c.Right)
+		if err != nil {
+			return nil, err
+		}
+		return goqu.Or(left, right), nil
 	}
-	if len(expressions) != 1 {
-		return nil, fmt.Errorf("incomplete filter syntax tree")
+	return fragment(c.Fragment())
+}
+
+// conditions maps the two sides of a connector, left first.
+func conditions(left, right sqlpg.Cond) (exp.Expression, exp.Expression, error) {
+	l, err := condition(left)
+	if err != nil {
+		return nil, nil, err
 	}
-	return expressions[0], nil
+	r, err := condition(right)
+	if err != nil {
+		return nil, nil, err
+	}
+	return l, r, nil
 }

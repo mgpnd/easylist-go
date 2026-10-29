@@ -9,6 +9,7 @@ import (
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
 	filter "github.com/mgpnd/easylist-go/easylist-filter"
+	"github.com/mgpnd/easylist-go/easylist-sqlpg"
 
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
@@ -57,9 +58,29 @@ func predicatePlan(t *testing.T) *easylist.Plan {
 	return p
 }
 
+// lowerPredicate lowers a copy of p whose only filter is node, without a
+// scope, with sqlpg.Lower, and maps its condition onto goqu as Compile does.
+func lowerPredicate(p *easylist.Plan, node filter.Predicate) (exp.Expression, error) {
+	one := *p
+	one.Kind, one.Scope, one.Filter = easylist.KindCount, "", node
+	q, err := sqlpg.Lower(&one)
+	if err != nil {
+		return nil, err
+	}
+	return condition(q.Where)
+}
+
+// operatorText spells each operator as the filter syntax does.
+var operatorText = map[filter.PredicateOp]string{
+	filter.OpEq: "=", filter.OpNeq: "!=", filter.OpGt: ">", filter.OpGte: ">=",
+	filter.OpLt: "<", filter.OpLte: "<=", filter.OpContains: "CONTAINS",
+	filter.OpExcludes: "EXCLUDES", filter.OpBetween: "BETWEEN",
+	filter.OpIn: "IN", filter.OpNotIn: "NOT IN",
+}
+
 func renderPredicate(t *testing.T, filter string) (string, []any) {
 	t.Helper()
-	expr, err := buildPredicate(predicatePlan(t), parsePredicate(t, filter))
+	expr, err := lowerPredicate(predicatePlan(t), parsePredicate(t, filter))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +199,7 @@ func TestBuildPredicateRejectsNullWithOtherOperators(t *testing.T) {
 	} {
 		t.Run(tc.field+" "+tc.text, func(t *testing.T) {
 			node := rewrittenOperator{parsePredicate(t, tc.field+" = NULL"), tc.op}
-			expr, err := buildPredicate(predicatePlan(t), node)
+			expr, err := lowerPredicate(predicatePlan(t), node)
 			pos := fmt.Sprintf("position %d", len(tc.field)+2)
 			if expr != nil || err == nil {
 				t.Fatalf("want an error, got %#v", expr)
@@ -254,7 +275,7 @@ func TestBuildPredicateRejectsBadValues(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
-			expr, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			expr, err := lowerPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
 			if expr != nil || err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want nil expression and error containing %q; got %#v %v", tc.want, expr, err)
 			}
@@ -289,7 +310,7 @@ func TestBuildPredicateRejectsOperators(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
-			_, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			_, err := lowerPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -302,8 +323,8 @@ func TestBuildPredicateRejectsOperators(t *testing.T) {
 	}
 }
 
-// Ensure buildPredicate consumes the public AST predicate contract.
-var _ func(*easylist.Plan, filter.Predicate) (exp.Expression, error) = buildPredicate
+// Ensure lowerPredicate consumes the public AST predicate contract.
+var _ func(*easylist.Plan, filter.Predicate) (exp.Expression, error) = lowerPredicate
 
 func parsePredicate(t *testing.T, input string) filter.Predicate {
 	t.Helper()
@@ -395,7 +416,7 @@ func TestBuildPredicateRejectsArrayOperators(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
-			_, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			_, err := lowerPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -431,7 +452,7 @@ func TestBuildPredicateRejectsArrayValues(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
-			expr, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			expr, err := lowerPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
 			if expr != nil || err == nil {
 				t.Fatalf("want an error, got %#v", expr)
 			}
@@ -549,7 +570,7 @@ func TestBuildPredicateRejectsListValues(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.filter, func(t *testing.T) {
-			expr, err := buildPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
+			expr, err := lowerPredicate(predicatePlan(t), parsePredicate(t, tc.filter))
 			if expr != nil || err == nil {
 				t.Fatalf("want an error, got %#v", expr)
 			}
@@ -582,7 +603,7 @@ func TestBuildPredicateRejectsRewrittenLists(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.filter+" as "+operatorText[tc.op], func(t *testing.T) {
 			node := rewrittenOperator{parsePredicate(t, tc.filter), tc.op}
-			expr, err := buildPredicate(predicatePlan(t), node)
+			expr, err := lowerPredicate(predicatePlan(t), node)
 			if expr != nil || err == nil {
 				t.Fatalf("want an error, got %#v", expr)
 			}

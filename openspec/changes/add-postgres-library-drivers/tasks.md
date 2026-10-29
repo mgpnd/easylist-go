@@ -16,10 +16,10 @@
 
 ## 3. easylist-sql-goqu
 
-- [ ] 3.1 Rewrite `driver.go` to call `sqlpg.Lower` and map the `Query` onto goqu, rendering every `Cond` through `Fragment()` with `goqu.L` and keeping the hand-appended `LIMIT $n OFFSET $m`. Delete the moved code from `predicate.go` and `lower.go`. Verify `TestCompile*`, `TestReadmeSnippets`, and the other `driver_test.go` and `expr_test.go` driver-level tests pass with their expected values unchanged
-- [ ] 3.2 Port the internal tests in `predicate_test.go` and `expr_test.go` that call `buildPredicate` or `exprPredicate` to a test helper that lowers a one-predicate plan with `sqlpg.Lower` and renders it through the goqu mapping, keeping every expected SQL string, argument, and error unchanged. Verify `go test -race ./...` passes and `git diff` shows no change to any expected value
-- [ ] 3.3 Add `conformance_test.go` calling `conformance.Run(t, sqlgoqu.New())`, and a test that `go list -deps` of the package (without tests) contains goqu and none of bob, go-sqlbuilder, jet, ent, gorm, or pgx. Verify it passes offline, and live with `EASYLIST_PG_DSN` set
-- [ ] 3.4 Update `easylist-sql-goqu/README.md` to link the shared semantics in `easylist-sqlpg` and keep only the goqu-specific notes. Verify the README example test passes
+- [x] 3.1 Rewrite `driver.go` to call `sqlpg.Lower` and map the `Query` onto goqu, rendering every `Cond` through `Fragment()` with `goqu.L` and keeping the hand-appended `LIMIT $n OFFSET $m`. Delete the moved code from `predicate.go` and `lower.go`. Verify `TestCompile*`, `TestReadmeSnippets`, and the other `driver_test.go` and `expr_test.go` driver-level tests pass with their expected values unchanged
+- [x] 3.2 Port the internal tests in `predicate_test.go` and `expr_test.go` that call `buildPredicate` or `exprPredicate` to a test helper that lowers a one-predicate plan with `sqlpg.Lower` and renders it through the goqu mapping, keeping every expected SQL string, argument, and error unchanged. Verify `go test -race ./...` passes and `git diff` shows no change to any expected value
+- [x] 3.3 Add `conformance_test.go` calling `conformance.Run(t, sqlgoqu.New())`, and a test that `go list -deps` of the package (without tests) contains goqu and none of bob, go-sqlbuilder, jet, ent, gorm, or pgx. Verify it passes offline, and live with `EASYLIST_PG_DSN` set
+- [x] 3.4 Update `easylist-sql-goqu/README.md` to link the shared semantics in `easylist-sqlpg` and keep only the goqu-specific notes. Verify the README example test passes
 
 ## 4. easylist-sql-gorm
 

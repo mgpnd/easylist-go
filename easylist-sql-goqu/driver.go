@@ -5,9 +5,9 @@ package sqlgoqu
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
+	"github.com/mgpnd/easylist-go/easylist-sqlpg"
 
 	"github.com/doug-martin/goqu/v9"
 	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
@@ -25,81 +25,51 @@ var _ easylist.Driver = (*Driver)(nil)
 
 // Compile returns one prepared query with $n placeholders and its arguments.
 // Arguments follow the filter left to right, then limit and offset. Author
-// SQL is emitted verbatim; request values are always bound.
+// SQL is emitted verbatim; request values are always bound. Every validation
+// error comes from sqlpg.Lower.
 func (*Driver) Compile(p *easylist.Plan) (string, []any, error) {
-	from := p.Table + " AS " + p.Alias
-	for _, j := range p.Joins {
-		from += " " + j.SQL
+	q, err := sqlpg.Lower(p)
+	if err != nil {
+		return "", nil, err
 	}
-	ds := goqu.Dialect("postgres").From(goqu.L(from)).Prepared(true)
+	ds := goqu.Dialect("postgres").From(goqu.L(q.From.SQL)).Prepared(true)
 
-	var where []exp.Expression
-	if p.Scope != "" {
-		where = append(where, goqu.L("("+p.Scope+")"))
-	}
-	if p.Filter != nil {
-		expr, err := lowerFilter(p, p.Filter)
+	if q.Where != nil {
+		where, err := condition(q.Where)
 		if err != nil {
-			return "", nil, err
+			return "", nil, fmt.Errorf("list %q: %w", p.List, err)
 		}
-		where = append(where, expr)
-	}
-	if len(where) > 0 {
-		ds = ds.Where(goqu.And(where...))
+		ds = ds.Where(where)
 	}
 
-	switch p.Kind {
-	case easylist.KindCount:
+	if q.Count {
 		ds = ds.Select(goqu.COUNT(goqu.Star()))
-	case easylist.KindPage, easylist.KindExport:
-		if len(p.Fields) == 0 {
-			return "", nil, fmt.Errorf("plan for list %q selects no fields", p.List)
-		}
-		cols := make([]any, len(p.Fields))
-		for i, f := range p.Fields {
-			expr := fieldExpression(p, f, false)
-			if f.Array {
-				// Arrays reach the runtime as JSON text; to_json keeps NULL arrays NULL.
-				expr = goqu.L("to_json(?)::text", expr)
-			}
-			cols[i] = expr.As(goqu.C(f.Name))
+	} else {
+		cols := make([]any, len(q.Select))
+		for i, c := range q.Select {
+			cols[i] = goqu.L(c.Expr.SQL).As(goqu.C(c.Alias))
 		}
 		ds = ds.Select(cols...)
-		order := make([]exp.OrderedExpression, len(p.Order))
-		for i, o := range p.Order {
+		order := make([]exp.OrderedExpression, len(q.Order))
+		for i, o := range q.Order {
 			if o.Desc {
-				order[i] = fieldExpression(p, o.Field, false).Desc()
+				order[i] = goqu.L(o.Expr.SQL).Desc()
 			} else {
-				order[i] = fieldExpression(p, o.Field, false).Asc()
+				order[i] = goqu.L(o.Expr.SQL).Asc()
 			}
 		}
 		ds = ds.Order(order...)
-	default:
-		return "", nil, fmt.Errorf("invalid plan kind %d", p.Kind)
 	}
 
 	query, args, err := ds.ToSQL()
 	if err != nil {
 		return "", nil, err
 	}
-	if p.Kind == easylist.KindPage {
+	if q.Page != nil {
 		// goqu drops OFFSET 0; binding both keeps the query shape fixed.
 		n := len(args)
 		query += " LIMIT $" + strconv.Itoa(n+1) + " OFFSET $" + strconv.Itoa(n+2)
-		args = append(args, int64(p.Limit), int64(p.Offset))
+		args = append(args, q.Page.Limit, q.Page.Offset)
 	}
 	return query, args, nil
-}
-
-// fieldExpression returns a field's author SQL, or the quoted column of the
-// base table alias. Field names match ^[a-z_][a-z0-9_]*$, so quoting them
-// needs no escaping.
-func fieldExpression(p *easylist.Plan, f easylist.PlanField, parenthesize bool) exp.LiteralExpression {
-	if f.SQL == "" {
-		return goqu.L(p.Alias + `."` + strings.ReplaceAll(f.Name, `"`, `""`) + `"`)
-	}
-	if parenthesize {
-		return goqu.L("(" + f.SQL + ")")
-	}
-	return goqu.L(f.SQL)
 }
