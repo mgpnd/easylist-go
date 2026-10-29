@@ -161,7 +161,7 @@ characters").
   `NotIn`, `Between`, `IsNull`, and `IsNotNull`. Use them on an `expr.Raw`
   column when the golden test shows no cast. Fragments cover the rest.
 - **go-sqlbuilder** (`sqlbuilder.PostgreSQL.NewSelectBuilder()`): `From` and
-  `Select` take escaped author SQL. `Limit`/`Offset` are bound, including 0.
+  `Select` take escaped author SQL. `Limit`/`Offset` bind as Go `int`, so the driver binds `LIMIT`/`OFFSET` itself with `sb.Var` as `int64`.
   `Cond` methods write their field argument raw, so pass the escaped column
   only where the method does not escape it itself. Golden tests check both
   paths. Native `Equal`, `IsDistinctFrom`, `In`, `NotIn`, `Between`,

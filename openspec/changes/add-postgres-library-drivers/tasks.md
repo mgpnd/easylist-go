@@ -44,10 +44,10 @@
 
 ## 7. easylist-sql-sqlbuilder
 
-- [ ] 7.1 Create the `easylist-sql-sqlbuilder` module (package `sqlsqlbuilder`, requiring `github.com/huandu/go-sqlbuilder`) and add it to `go.work`. Verify `go build ./...` succeeds
-- [ ] 7.2 Implement `New()` and `Compile` with `sqlbuilder.PostgreSQL.NewSelectBuilder()`: escaped author SQL for `From`, `Select`, and ordering, bound `Limit`/`Offset`, predicates via `Fragment()` with `sb.Var`, and native `Cond` methods only where a golden test shows the same arguments and no cast. Verify with golden tests for page, export, and count shape, offset 0, every node type, and a scope containing `$` and `?`
-- [ ] 7.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (go-sqlbuilder present; no goqu, bob, jet, ent, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
-- [ ] 7.4 Write `easylist-sql-sqlbuilder/README.md`, including why the package is named `sqlsqlbuilder`, with a README example test. Verify the example test passes
+- [x] 7.1 Create the `easylist-sql-sqlbuilder` module (package `sqlsqlbuilder`, requiring `github.com/huandu/go-sqlbuilder`) and add it to `go.work`. Verify `go build ./...` succeeds
+- [x] 7.2 Implement `New()` and `Compile` with `sqlbuilder.PostgreSQL.NewSelectBuilder()`: escaped author SQL for `From`, `Select`, and ordering, bound `Limit`/`Offset`, predicates via `Fragment()` with `sb.Var`, and native `Cond` methods only where a golden test shows the same arguments and no cast. Verify with golden tests for page, export, and count shape, offset 0, every node type, and a scope containing `$` and `?`
+- [x] 7.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (go-sqlbuilder present; no goqu, bob, jet, ent, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
+- [x] 7.4 Write `easylist-sql-sqlbuilder/README.md`, including why the package is named `sqlsqlbuilder`, with a README example test. Verify the example test passes
 
 ## 8. easylist-sql-jet
 
