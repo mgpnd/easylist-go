@@ -161,6 +161,8 @@ EASYLIST_PG_DSN='postgres://postgres@127.0.0.1:54329/postgres?sslmode=disable' g
 
 The first command runs the offline checks and reports the live subtests as skipped. The second also runs the live ones.
 
+[CI](../.github/workflows/ci.yml) runs the suite for every driver with `EASYLIST_PG_DSN` set to a PostgreSQL 16 database, and fails if any live case is skipped.
+
 ## Start a local PostgreSQL
 
 The suite needs PostgreSQL 16 or later and a role that can create schemas and types. `EASYLIST_PG_DSN` takes any connection string `pgx` accepts, usually a URL of the form `postgres://<user>[:<password>]@<host>:<port>/<database>?sslmode=disable`.

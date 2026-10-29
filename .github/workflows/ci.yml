@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to a pull request cancels its older run; runs on main always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            go.work.sum
+            **/go.sum
+
+      # The root has no go.mod, so ./... matches nothing; list every go.work module instead.
+      - name: Vet
+        run: go vet $(go list -m -f '{{.Dir}}/...')
+
+      - name: Test
+        id: test
+        env:
+          EASYLIST_PG_DSN: postgres://postgres@localhost:5432/postgres?sslmode=disable
+        run: |
+          set -o pipefail
+          go test -race -v $(go list -m -f '{{.Dir}}/...') 2>&1 | tee test.log
+
+      # Matches the skip message of the conformance suite's live cases,
+      # t.Skip(DSNEnv + " is not set") in easylist-sqlpg/conformance/conformance.go.
+      - name: Check that no live conformance case was skipped
+        if: always() && steps.test.outcome != 'skipped'
+        run: |
+          skipped=$(grep -c 'EASYLIST_PG_DSN is not set' test.log || true)
+          if [ "$skipped" -gt 0 ]; then
+            echo "::error::$skipped live conformance cases were skipped because EASYLIST_PG_DSN did not reach the tests"
+            exit 1
+          fi
+          echo "No live conformance case was skipped."

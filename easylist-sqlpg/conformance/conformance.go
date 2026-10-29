@@ -45,6 +45,7 @@ func Run(t *testing.T, d easylist.Driver) {
 			}
 			t.Run("live", func(t *testing.T) {
 				if db == nil {
+					// .github/workflows/ci.yml fails the run when it finds this message.
 					t.Skip(DSNEnv + " is not set")
 				}
 				db.check(t, d, c)
