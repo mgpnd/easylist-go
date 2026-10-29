@@ -5,6 +5,7 @@ use (
 	./easylist-export
 	./easylist-filter
 	./easylist-gqlgen
+	./easylist-sql-ent
 	./easylist-sql-goqu
 	./easylist-sql-gorm
 	./easylist-sqlpg

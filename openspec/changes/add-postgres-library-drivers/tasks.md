@@ -30,10 +30,10 @@
 
 ## 5. easylist-sql-ent
 
-- [ ] 5.1 Create the `easylist-sql-ent` module (package `sqlent`, requiring `entgo.io/ent` and importing only `entgo.io/ent/dialect` and `dialect/sql`) and add it to `go.work`. Verify `go build ./...` succeeds
-- [ ] 5.2 Implement `New()` and `Compile` with `sql.Dialect(dialect.Postgres).Select()`: `FromExpr(sql.Raw(from))`, `AppendSelectExprAs`, `OrderExpr`, `Where` with `sql.And`/`sql.Or` over `sql.P` fragments (author SQL through `b.WriteString`, values through `b.Arg`), and `LIMIT $n OFFSET $m` appended by hand. Verify with golden tests for page, export, and count shape, limit 25 and offset 75 not appearing as literals, offset 0, and author SQL containing `?` and `$`
-- [ ] 5.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (ent present; no goqu, bob, go-sqlbuilder, jet, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
-- [ ] 5.4 Write `easylist-sql-ent/README.md` (usage next to an ent client, no generated code needed) with a README example test. Verify the example test passes
+- [x] 5.1 Create the `easylist-sql-ent` module (package `sqlent`, requiring `entgo.io/ent` and importing only `entgo.io/ent/dialect` and `dialect/sql`) and add it to `go.work`. Verify `go build ./...` succeeds
+- [x] 5.2 Implement `New()` and `Compile` with `sql.Dialect(dialect.Postgres).Select()`: `FromExpr(sql.Raw(from))`, `AppendSelectExprAs`, `OrderExpr`, `Where` with `sql.And`/`sql.Or` over `sql.P` fragments (author SQL through `b.WriteString`, values through `b.Arg`), and `LIMIT $n OFFSET $m` appended by hand. Verify with golden tests for page, export, and count shape, limit 25 and offset 75 not appearing as literals, offset 0, and author SQL containing `?` and `$`
+- [x] 5.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (ent present; no goqu, bob, go-sqlbuilder, jet, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
+- [x] 5.4 Write `easylist-sql-ent/README.md` (usage next to an ent client, no generated code needed) with a README example test. Verify the example test passes
 
 ## 6. easylist-sql-bob
 
