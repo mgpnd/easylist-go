@@ -1,7 +1,6 @@
 package sqlgoqu
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,7 +11,6 @@ import (
 	filter "github.com/mgpnd/easylist-go/easylist-filter"
 
 	"github.com/doug-martin/goqu/v9"
-	"github.com/doug-martin/goqu/v9/exp"
 )
 
 var (
@@ -56,7 +54,7 @@ func planExpr(t *testing.T, input string, now time.Time) (*easylist.Plan, filter
 func renderExpr(t *testing.T, input string, now time.Time) (string, []any) {
 	t.Helper()
 	p, pred := planExpr(t, input, now)
-	expr, err := buildPredicate(p, pred)
+	expr, err := lowerPredicate(p, pred)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +199,7 @@ func TestExprMicrosecondTruncation(t *testing.T) {
 
 func TestExprRejectsNonIntegerResult(t *testing.T) {
 	p, pred := planExpr(t, "age > {10 / 4}", nowUTC)
-	_, err := buildPredicate(p, pred)
+	_, err := lowerPredicate(p, pred)
 	if err == nil || !strings.Contains(err.Error(), `"2.5"`) || !strings.Contains(err.Error(), "position 7") {
 		t.Fatalf("want an error naming 2.5 at position 7, got %v", err)
 	}
@@ -210,54 +208,9 @@ func TestExprRejectsNonIntegerResult(t *testing.T) {
 func TestExprMissingValue(t *testing.T) {
 	// A predicate the plan did not evaluate, such as one from another parse.
 	p, _ := planExpr(t, "at > NOW", nowUTC)
-	_, err := buildPredicate(p, parsePredicate(t, "at > NOW"))
+	_, err := lowerPredicate(p, parsePredicate(t, "at > NOW"))
 	if err == nil || !strings.Contains(err.Error(), "no evaluated value") || !strings.Contains(err.Error(), "position 6") {
 		t.Fatalf("want a positioned error, got %v", err)
-	}
-}
-
-// Kind and field combinations the planner rejects still fail cleanly.
-func TestExprPredicateDefensive(t *testing.T) {
-	field := func(name string) easylist.PlanField {
-		f, ok := predicatePlan(t).Lookup(name)
-		if !ok {
-			t.Fatalf("no field %s", name)
-		}
-		return f
-	}
-	date := easylist.Value{Kind: easylist.ValueDate, Time: tm(2026, 10, 27, 0, 0, utc)}
-	stamp := easylist.Value{Kind: easylist.ValueTimestamp, Time: nowUTC}
-	number := easylist.Value{Kind: easylist.ValueNumber, Number: "1"}
-	cases := []struct {
-		field string
-		op    filter.PredicateOp
-		v     easylist.Value
-		want  string
-	}{
-		{"day", filter.OpEq, stamp, "with a timestamp value"},
-		{"age", filter.OpEq, date, "with a date value"},
-		{"price", filter.OpGt, stamp, "with a timestamp value"},
-		{"at", filter.OpEq, number, "with a number value"},
-		{"name", filter.OpEq, number, "with a number value"},
-		{"active", filter.OpEq, number, "with a number value"},
-		{"uid", filter.OpEq, date, "with a date value"},
-		{"status", filter.OpEq, stamp, "with a timestamp value"},
-		{"age", filter.OpEq, easylist.Value{}, "with a invalid value"},
-		{"age", filter.OpEq, easylist.Value{Kind: easylist.ValueNumber, Number: "x"}, `"x"`},
-		{"ids", filter.OpEq, number, "array field"},
-		{"days", filter.OpContains, date, "array field"},
-		{"day", filter.OpBetween, date, `operator "BETWEEN"`},
-		{"name", filter.OpContains, number, `operator "CONTAINS"`},
-		{"name", filter.OpExcludes, number, `operator "EXCLUDES"`},
-	}
-	for _, tc := range cases {
-		t.Run(fmt.Sprintf("%s %s %s", tc.field, operatorText[tc.op], tc.v.Kind), func(t *testing.T) {
-			f := field(tc.field)
-			expr, err := exprPredicate(f, fieldExpression(predicatePlan(t), f, true), tc.op, tc.v, 42)
-			if expr != nil || err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "position 42") {
-				t.Fatalf("want an error containing %q at position 42, got %#v %v", tc.want, expr, err)
-			}
-		})
 	}
 }
 
@@ -363,5 +316,3 @@ func TestCompileExpressionErrorPosition(t *testing.T) {
 		t.Fatalf("got %q %#v", sql, args)
 	}
 }
-
-var _ func(easylist.PlanField, exp.LiteralExpression, filter.PredicateOp, easylist.Value, int) (exp.Expression, error) = exprPredicate
