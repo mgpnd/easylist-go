@@ -9,6 +9,7 @@ use (
 	./easylist-sql-ent
 	./easylist-sql-goqu
 	./easylist-sql-gorm
+	./easylist-sql-jet
 	./easylist-sql-sqlbuilder
 	./easylist-sqlpg
 )

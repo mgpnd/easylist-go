@@ -271,6 +271,13 @@ Every driver exposes `New() *Driver` and `var _ easylist.Driver = (*Driver)(nil)
 - [gorm's internals (`Statement.SQL`, the DryRun callbacks) are not a
   stable API] → pin the version, and keep the gorm-specific code to one
   file with golden tests for every clause.
+- [jet's PostgreSQL package imports `github.com/lib/pq` (since jet
+  v2.14.0) for its array literals, so the jet driver compiles in lib/pq and
+  its `init` registers the `postgres` `database/sql` driver] → accepted:
+  every jet PostgreSQL application already compiles it in. The jet driver's
+  compiled-in package test allows lib/pq only when jet's `postgres` package
+  is its sole importer, and its README says so. jet v2.13.0 avoids lib/pq
+  but compiles testify and yaml.v3 into production builds, which is worse.
 - [ent pulls in a large module graph] → only `entgo.io/ent/dialect` and
   `dialect/sql` are imported. The compiled-in package check in
   `sql-ent-compilation` keeps it that way.

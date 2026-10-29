@@ -51,10 +51,10 @@
 
 ## 8. easylist-sql-jet
 
-- [ ] 8.1 Create the `easylist-sql-jet` module (package `sqljet`, requiring `github.com/go-jet/jet/v2`) and add it to `go.work`. Verify `go build ./...` succeeds
-- [ ] 8.2 Implement `New()` and `Compile` with `postgres.SELECT(...).FROM(NewTable("", sentinel, ""))`: choose the sentinel as in design.md, replace its single occurrence with the verbatim `From` (error if the count is not one), projections as `Raw(expr).AS(alias)`, predicates with `CustomExpression` over `Token`, opaque `Raw` leaves, and one-argument `Raw` slots, bound `LIMIT`/`OFFSET`, and the trailing `;\n` trimmed. Verify with golden tests for page, export, and count shape, offset 0, no `::text` or other cast besides `::numeric`, twelve `IN` items bound `$1`..`$14` in order, a plan whose author SQL contains `easylist_from`, and author SQL containing `#1` and `?`
-- [ ] 8.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (jet present; no goqu, bob, go-sqlbuilder, ent, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
-- [ ] 8.4 Write `easylist-sql-jet/README.md` (no generated code needed, and the note on jet's casts) with a README example test. Verify the example test passes
+- [x] 8.1 Create the `easylist-sql-jet` module (package `sqljet`, requiring `github.com/go-jet/jet/v2`) and add it to `go.work`. Verify `go build ./...` succeeds
+- [x] 8.2 Implement `New()` and `Compile` with `postgres.SELECT(...).FROM(NewTable("", sentinel, ""))`: choose the sentinel as in design.md, replace its single occurrence with the verbatim `From` (error if the count is not one), projections as `Raw(expr).AS(alias)`, predicates with `CustomExpression` over `Token`, opaque `Raw` leaves, and one-argument `Raw` slots, bound `LIMIT`/`OFFSET`, and the trailing `;\n` trimmed. Verify with golden tests for page, export, and count shape, offset 0, no `::text` or other cast besides `::numeric`, twelve `IN` items bound `$1`..`$14` in order, a plan whose author SQL contains `easylist_from`, and author SQL containing `#1` and `?`
+- [x] 8.3 Add `conformance_test.go`, a concurrent-compile test under `-race`, and the compiled-in package test (jet present; no goqu, bob, go-sqlbuilder, ent, gorm, or pgx). Verify all pass offline, and live with `EASYLIST_PG_DSN` set
+- [x] 8.4 Write `easylist-sql-jet/README.md` (no generated code needed, and the note on jet's casts) with a README example test. Verify the example test passes
 
 ## 9. Workspace integration
 
