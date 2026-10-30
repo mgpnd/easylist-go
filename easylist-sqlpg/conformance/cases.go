@@ -142,6 +142,9 @@ var cases = []testCase{
 	{name: "BETWEEN timestamps", filter: "created_at BETWEEN '2026-01-01T00:00:00Z, 2026-02-01T00:00:00Z'", ids: ids(13, 14)},
 	{name: "BETWEEN quoted bounds", filter: "age BETWEEN '30,40'", ids: ids(2, 3, 4, 9)},
 	{name: "BETWEEN list bounds", filter: "age BETWEEN (30, 40)", ids: ids(2, 3, 4, 9), args: []any{int64(30), int64(40), int64(100), int64(0)}},
+	{name: "quoted number list item", filter: "age BETWEEN ('30', '40')", ids: ids(2, 3, 4, 9), args: []any{int64(30), int64(40), int64(100), int64(0)}},
+	// As text '25' < '9', so only a numeric comparison matches every age.
+	{name: "quoted integer", filter: "age > '9'", ids: ids(1, 2, 3, 4, 5, 6, 9), args: []any{int64(9), int64(100), int64(0)}},
 	{name: "BETWEEN date list bounds", filter: "due BETWEEN ('2026-01-01', '2026-02-01')", ids: ids(3, 4)},
 	{name: "grouped OR under AND", filter: "(name = 'a' OR name = 'b') AND active = TRUE", ids: ids(4)},
 
@@ -249,7 +252,6 @@ var cases = []testCase{
 	{name: "invalid array item", filter: "ids CONTAINS '7,x'", err: []string{`"x"`, "position 14"}},
 	{name: "undeclared enum array item", filter: "statuses EXCLUDES 'skipped,archived'", err: []string{`"archived"`, "position 19"}},
 	{name: "undeclared enum list item", filter: "status IN ('success', 'archived')", err: []string{`"archived"`, "position 23"}},
-	{name: "quoted number list item", filter: "age BETWEEN ('30', '40')", err: []string{`"30"`, "position 14"}},
 	{name: "invalid array list item", filter: "ids CONTAINS (7, 'x')", err: []string{`"x"`, "position 18"}},
 	{name: "list on a text field", filter: "name CONTAINS ('a', 'b')", err: []string{`"name"`, "position 15"}},
 }

@@ -21,7 +21,11 @@ func TestLowerErrors(t *testing.T) {
 		{"age = 9223372036854775808", "invalid integer value \"9223372036854775808\" for field \"age\" at position 7"},
 		{"age = -9223372036854775809", "invalid integer value \"-9223372036854775809\" for field \"age\" at position 7"},
 		{"age = 1.5", "invalid integer value \"1.5\" for field \"age\" at position 7"},
-		{"age = '30'", "invalid integer value \"30\" for field \"age\" at position 7"},
+		{"age = '30.0'", "invalid integer value \"30.0\" for field \"age\" at position 7"},
+		{"age = ' 30'", "invalid integer value \" 30\" for field \"age\" at position 7"},
+		{"age = 'abc'", "invalid integer value \"abc\" for field \"age\" at position 7"},
+		{"score = 'NaN'", "invalid float value \"NaN\" for field \"score\" at position 9"},
+		{"price = '1e3'", "invalid numeric value \"1e3\" for field \"price\" at position 9"},
 		{"day = '2025-02-29'", "invalid date value \"2025-02-29\" for field \"day\" at position 7"},
 		{"day = '2024-2-29'", "invalid date value \"2024-2-29\" for field \"day\" at position 7"},
 		{"day = '2024-02-29T00:00:00Z'", "invalid date value \"2024-02-29T00:00:00Z\" for field \"day\" at position 7"},
@@ -110,14 +114,12 @@ func TestLowerErrors(t *testing.T) {
 		// List values.
 		{"status IN ('active', 'archived')", "invalid enum value \"archived\" for field \"status\" at position 22: not a declared value"},
 		{"status NOT IN ('Active')", "invalid enum value \"Active\" for field \"status\" at position 16: not a declared value"},
-		{"age IN (1, '30')", "invalid integer value \"30\" for field \"age\" at position 12"},
 		{"age NOT IN (1.5)", "invalid integer value \"1.5\" for field \"age\" at position 13"},
 		{"active IN ('true')", "invalid boolean value \"true\" for field \"active\" at position 12"},
 		{"name IN (1)", "invalid text value \"1\" for field \"name\" at position 10"},
 		{"uid IN ('not-a-uuid')", "invalid uuid value \"not-a-uuid\" for field \"uid\" at position 9"},
 		{"day IN ('2024-02-29', ' 2025-01-01')", "invalid date value \" 2025-01-01\" for field \"day\" at position 23"},
 		{"at IN ('2026-01-01T00:00:00')", "invalid timestamp value \"2026-01-01T00:00:00\" for field \"at\" at position 8: timestamps need an offset such as Z or +02:00"},
-		{"age BETWEEN ('30', '40')", "invalid integer value \"30\" for field \"age\" at position 14"},
 		{"age BETWEEN (30, 40.5)", "invalid integer value \"40.5\" for field \"age\" at position 18"},
 		{"day BETWEEN (' 2024-02-29', '2025-01-01')", "invalid date value \" 2024-02-29\" for field \"day\" at position 14"},
 		{"at BETWEEN ('2026-01-01T00:00:00Z', '2026-02-01')", "invalid timestamp value \"2026-02-01\" for field \"at\" at position 37"},
@@ -437,6 +439,34 @@ func TestLowerConds(t *testing.T) {
 			got := lowerCount(t, tc.filter, nowP2).Where
 			if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", tc.want) {
 				t.Errorf("got\n%#v\nwant\n%#v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A quoted number on a number field lowers exactly like the unquoted one.
+func TestLowerQuotedNumbers(t *testing.T) {
+	cases := []struct {
+		quoted, unquoted string
+		args             []any
+	}{
+		{"age > '30'", "age > 30", []any{int64(30)}},
+		{"age = '-7'", "age = -7", []any{int64(-7)}},
+		{"score >= '-1.5'", "score >= -1.5", []any{-1.5}},
+		{"price < '19.990'", "price < 19.990", []any{"19.990"}},
+		{"age IN (1, '30')", "age IN (1, 30)", []any{int64(1), int64(30)}},
+		{"age BETWEEN ('30', '40')", "age BETWEEN (30, 40)", []any{int64(30), int64(40)}},
+		{"price NOT IN ('1.10', NULL)", "price NOT IN (1.10, NULL)", []any{"1.10"}},
+		{"ids CONTAINS ('7', 8)", "ids CONTAINS (7, 8)", []any{int64(7), int64(8)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.quoted, func(t *testing.T) {
+			got, want := lowerCount(t, tc.quoted, nowUTC), lowerCount(t, tc.unquoted, nowUTC)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("got\n%#v\nwant\n%#v", got, want)
+			}
+			if args := got.Args(); !reflect.DeepEqual(args, tc.args) {
+				t.Errorf("got args %#v, want %#v", args, tc.args)
 			}
 		})
 	}
