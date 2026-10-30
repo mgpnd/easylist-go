@@ -21,7 +21,7 @@
 
 ## 3. Integration
 
-- [ ] 3.1 Push the branch and open a pull request to `main` (only when the user asks). Verify the `test` check runs on it and passes, that its log shows live conformance subtests passing for all six drivers (`--- PASS: TestConformance/.*/live`), and that the guard step reports zero skipped live cases
+- [x] 3.1 Push the branch and open a pull request to `main` (only when the user asks). Verify the `test` check runs on it and passes, that its log shows live conformance subtests passing for all six drivers (`--- PASS: TestConformance/.*/live`), and that the guard step reports zero skipped live cases
 
 ## Workflow follow-up
 
