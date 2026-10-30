@@ -12,7 +12,7 @@ import (
 	easylist "github.com/mgpnd/easylist-go/easylist-core"
 	easylistexport "github.com/mgpnd/easylist-go/easylist-export"
 	"github.com/mgpnd/easylist-go/easylist-gqlgen/internal/fixture/lists"
-	sqlgoqu "github.com/mgpnd/easylist-go/easylist-sql-goqu"
+	sqlgorm "github.com/mgpnd/easylist-go/easylist-sql-gorm"
 )
 
 // sqlDB records PostgreSQL queries from the real driver and answers them
@@ -58,7 +58,7 @@ func TestEndToEnd(t *testing.T) {
 		export: [][]any{{int64(1), "Ann", "FR"}, {int64(4), "Dan, Jr", nil}},
 		total:  7,
 	}
-	rt := &easylist.Runtime{Driver: sqlgoqu.New(), DB: db, Exporter: queue}
+	rt := &easylist.Runtime{Driver: sqlgorm.New(), DB: db, Exporter: queue}
 
 	resp := run(t, rt, `{ people(query: {filter: "name CONTAINS 'a'", sort: [{field: COUNTRY, direction: DESC}], limit: 2}) {
 		totalCount
@@ -70,7 +70,7 @@ func TestEndToEnd(t *testing.T) {
 	if want := `{"people":{"totalCount":7,"items":[{"country":"FR","display":"Ann (FR)"},{"country":null,"display":"Dan"}]}}`; string(resp.Data) != want {
 		t.Errorf("data = %s", resp.Data)
 	}
-	where := `WHERE ((u.deleted_at IS NULL) AND u."name" ILIKE $1 ESCAPE E'\\')`
+	where := `WHERE (u.deleted_at IS NULL) AND u."name" ILIKE $1 ESCAPE E'\\'`
 	want := []sqlCall{
 		{`SELECT u."id" AS "id", u."name" AS "name", c.name AS "country" FROM users AS u LEFT JOIN countries c ON c.id = u.country_id ` +
 			where + ` ORDER BY c.name DESC, u."id" ASC LIMIT $2 OFFSET $3`, []any{"%a%", int64(2), int64(0)}},
@@ -110,7 +110,7 @@ func TestEndToEnd(t *testing.T) {
 
 func TestEndToEndArrays(t *testing.T) {
 	db := &sqlDB{page: [][]any{{int64(1), `["go","rust"]`, `["editor"]`}, {int64(2), nil, `[]`}}}
-	rt := &easylist.Runtime{Driver: sqlgoqu.New(), DB: db}
+	rt := &easylist.Runtime{Driver: sqlgorm.New(), DB: db}
 	resp := run(t, rt, `{ people(query: {filter: "tags CONTAINS 'go, rust' OR roles EXCLUDES 'admin'", limit: 10}) { items { tags roles } } }`)
 	if len(resp.Errors) > 0 {
 		t.Fatalf("errors: %+v", resp.Errors)
@@ -119,7 +119,7 @@ func TestEndToEndArrays(t *testing.T) {
 		t.Errorf("data = %s", resp.Data)
 	}
 	want := []sqlCall{{`SELECT u."id" AS "id", to_json(u."tags")::text AS "tags", to_json(u."roles")::text AS "roles" FROM users AS u ` +
-		`WHERE ((u.deleted_at IS NULL) AND (($1 = ANY(u."tags") AND $2 = ANY(u."tags")) OR COALESCE(NOT ($3 = ANY(u."roles")), TRUE))) ` +
+		`WHERE (u.deleted_at IS NULL) AND (($1 = ANY(u."tags") AND $2 = ANY(u."tags")) OR COALESCE(NOT ($3 = ANY(u."roles")), TRUE)) ` +
 		`ORDER BY u."id" ASC LIMIT $4 OFFSET $5`, []any{"go", "rust", "admin", int64(10), int64(0)}}}
 	if !reflect.DeepEqual(db.calls, want) {
 		t.Errorf("queries =\n%#v\nwant\n%#v", db.calls, want)
@@ -132,7 +132,7 @@ func TestEndToEndRelativeTime(t *testing.T) {
 	queue := &queueExporter{}
 	db := &sqlDB{page: [][]any{{int64(1)}}, export: [][]any{{int64(1), "Ann"}}}
 	clock := time.Date(2026, 10, 28, 2, 0, 0, 0, time.UTC)
-	rt := &easylist.Runtime{Driver: sqlgoqu.New(), DB: db, Exporter: queue, Clock: func() time.Time { return clock }}
+	rt := &easylist.Runtime{Driver: sqlgorm.New(), DB: db, Exporter: queue, Clock: func() time.Time { return clock }}
 
 	resp := run(t, rt, `{ people(query: {filter: "created_at = TODAY", timezone: -300, limit: 10}) { items { id } } }`)
 	if len(resp.Errors) > 0 {
@@ -161,8 +161,8 @@ func TestEndToEndRelativeTime(t *testing.T) {
 	if len(db.calls) != 1 {
 		t.Fatalf("queries = %#v", db.calls)
 	}
-	checkDay("page", db.calls[0], `SELECT u."id" AS "id" FROM users AS u WHERE ((u.deleted_at IS NULL) AND `+dayRange+
-		`) ORDER BY u."id" ASC LIMIT $3 OFFSET $4`, int64(10), int64(0))
+	checkDay("page", db.calls[0], `SELECT u."id" AS "id" FROM users AS u WHERE (u.deleted_at IS NULL) AND `+dayRange+
+		` ORDER BY u."id" ASC LIMIT $3 OFFSET $4`, int64(10), int64(0))
 
 	db.calls = nil
 	resp = run(t, rt, `mutation { exportPeople(input: {fields: [NAME], filter: "created_at = TODAY", timezone: -300, format: CSV}) { id } }`)
@@ -185,6 +185,6 @@ func TestEndToEndRelativeTime(t *testing.T) {
 	if len(db.calls) != 1 {
 		t.Fatalf("export queries = %#v", db.calls)
 	}
-	checkDay("export", db.calls[0], `SELECT u."id" AS "id", u."name" AS "name" FROM users AS u WHERE ((u.deleted_at IS NULL) AND `+dayRange+
-		`) ORDER BY u."id" ASC`)
+	checkDay("export", db.calls[0], `SELECT u."id" AS "id", u."name" AS "name" FROM users AS u WHERE (u.deleted_at IS NULL) AND `+dayRange+
+		` ORDER BY u."id" ASC`)
 }

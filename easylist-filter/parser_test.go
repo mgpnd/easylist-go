@@ -811,9 +811,16 @@ func TestEnumStrings(t *testing.T) {
 	for o := ArithAdd; o <= ArithDiv+1; o++ {
 		got = append(got, o.String())
 	}
-	want := "NOW TODAY START_OF_WEEK END_OF_WEEK START_OF_MONTH END_OF_MONTH START_OF_YEAR END_OF_YEAR TimeKeyword(8) " +
-		"DAYS BUSINESS_DAYS HOURS MINUTES TimeUnit(4) + - * / ArithOp(4)"
-	if strings.Join(got, " ") != want {
-		t.Fatalf("got %s", strings.Join(got, " "))
+	for o := OpEq; o <= OpNotIn+1; o++ {
+		got = append(got, o.String())
+	}
+	for o := And; o <= Or+1; o++ {
+		got = append(got, o.String())
+	}
+	want := "NOW|TODAY|START_OF_WEEK|END_OF_WEEK|START_OF_MONTH|END_OF_MONTH|START_OF_YEAR|END_OF_YEAR|TimeKeyword(8)|" +
+		"DAYS|BUSINESS_DAYS|HOURS|MINUTES|TimeUnit(4)|+|-|*|/|ArithOp(4)|" +
+		"=|>|>=|<|<=|CONTAINS|EXCLUDES|BETWEEN|!=|IN|NOT IN|PredicateOp(11)|AND|OR|LogicalOp(2)"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("got %s", strings.Join(got, "|"))
 	}
 }

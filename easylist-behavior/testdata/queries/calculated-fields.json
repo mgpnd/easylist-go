@@ -1,0 +1,71 @@
+{
+  "data": {
+    "people": {
+      "totalCount": 7,
+      "items": [
+        {
+          "name": "Ann Lee",
+          "display": "Ann Lee (France)",
+          "tier": "LOYAL",
+          "labels": [
+            "plan:pro",
+            "role:admin"
+          ]
+        },
+        {
+          "name": "Bob Stone",
+          "display": "Bob Stone (Japan)",
+          "tier": "REGULAR",
+          "labels": [
+            "plan:free",
+            "role:editor"
+          ]
+        },
+        {
+          "name": "Cara Diaz",
+          "display": "Cara Diaz (Brazil)",
+          "tier": "REGULAR",
+          "labels": [
+            "plan:team",
+            "role:editor",
+            "role:viewer"
+          ]
+        },
+        {
+          "name": "Dan O'Brien",
+          "display": "Dan O'Brien (Germany)",
+          "tier": "NEW",
+          "labels": [
+            "plan:free"
+          ]
+        },
+        {
+          "name": "Eve Martin",
+          "display": "Eve Martin (France)",
+          "tier": "REGULAR",
+          "labels": [
+            "plan:pro",
+            "role:viewer"
+          ]
+        },
+        {
+          "name": "Finn Larsen",
+          "display": "Finn Larsen (Germany)",
+          "tier": "NEW",
+          "labels": [
+            "plan:team",
+            "role:viewer"
+          ]
+        },
+        {
+          "name": "Gil Moreau",
+          "display": "Gil Moreau",
+          "tier": "NEW",
+          "labels": [
+            "plan:free"
+          ]
+        }
+      ]
+    }
+  }
+}

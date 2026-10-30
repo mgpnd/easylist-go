@@ -1,0 +1,119 @@
+{
+  "data": {
+    "people": {
+      "items": [
+        {
+          "name": "Ann Lee",
+          "plan": "PRO",
+          "roles": [
+            "ADMIN"
+          ],
+          "tags": [
+            "go",
+            "sql"
+          ],
+          "lucky_numbers": [
+            7,
+            13
+          ],
+          "ratings": [
+            4.5,
+            5
+          ],
+          "prices": [
+            "9.99",
+            "19.90"
+          ],
+          "answers": [
+            true,
+            true
+          ],
+          "holidays": [
+            "2026-10-27",
+            "2026-12-24"
+          ],
+          "logins": [
+            "2026-10-26T08:00:00Z",
+            "2026-10-27T10:00:00Z"
+          ],
+          "friend_ids": [
+            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-4000-8000-000000000003"
+          ]
+        },
+        {
+          "name": "Dan O'Brien",
+          "plan": "FREE",
+          "roles": [],
+          "tags": [],
+          "lucky_numbers": [],
+          "ratings": [],
+          "prices": [],
+          "answers": [],
+          "holidays": [],
+          "logins": [],
+          "friend_ids": []
+        },
+        {
+          "name": "Eve Martin",
+          "plan": "PRO",
+          "roles": [
+            "VIEWER"
+          ],
+          "tags": null,
+          "lucky_numbers": null,
+          "ratings": null,
+          "prices": null,
+          "answers": null,
+          "holidays": null,
+          "logins": null,
+          "friend_ids": null
+        },
+        {
+          "name": "Hana Sato",
+          "plan": "TEAM",
+          "roles": [
+            "ADMIN",
+            "EDITOR"
+          ],
+          "tags": [
+            "go",
+            "python",
+            "sql"
+          ],
+          "lucky_numbers": [
+            1,
+            2,
+            3
+          ],
+          "ratings": [
+            5,
+            5,
+            4.5
+          ],
+          "prices": [
+            "99.95"
+          ],
+          "answers": [
+            true,
+            true,
+            true
+          ],
+          "holidays": [
+            "2026-10-30",
+            "2026-11-01"
+          ],
+          "logins": [
+            "2026-09-15T09:00:00Z",
+            "2026-10-01T00:00:00Z"
+          ],
+          "friend_ids": [
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000003",
+            "00000000-0000-4000-8000-000000000010"
+          ]
+        }
+      ]
+    }
+  }
+}

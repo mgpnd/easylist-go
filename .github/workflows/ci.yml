@@ -55,14 +55,17 @@ jobs:
           set -o pipefail
           go test -race -v $(go list -m -f '{{.Dir}}/...') 2>&1 | tee test.log
 
-      # Matches the skip message of the conformance suite's live cases,
-      # t.Skip(DSNEnv + " is not set") in easylist-sqlpg/conformance/conformance.go.
-      - name: Check that no live conformance case was skipped
+      # Matches the message every test needing PostgreSQL skips with when
+      # EASYLIST_PG_DSN is unset. It has two sources, whose texts must stay identical:
+      # - the conformance suite's live cases, t.Skip(DSNEnv + " is not set")
+      #   in easylist-sqlpg/conformance/conformance.go;
+      # - the behaviour snapshots, t.Skip(skipNoDSN) in easylist-behavior/harness_test.go.
+      - name: Check that no test needing PostgreSQL was skipped
         if: always() && steps.test.outcome != 'skipped'
         run: |
           skipped=$(grep -c 'EASYLIST_PG_DSN is not set' test.log || true)
           if [ "$skipped" -gt 0 ]; then
-            echo "::error::$skipped live conformance cases were skipped because EASYLIST_PG_DSN did not reach the tests"
+            echo "::error::$skipped tests needing PostgreSQL were skipped because EASYLIST_PG_DSN did not reach the tests"
             exit 1
           fi
-          echo "No live conformance case was skipped."
+          echo "No test needing PostgreSQL was skipped."

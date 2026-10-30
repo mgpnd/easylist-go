@@ -1,0 +1,13 @@
+# age_group fails on Kai, whose age is -1. age_group is nullable, so the
+# error nulls only that field of that row: the other rows keep their
+# values, and the response carries the error with the row's path. Mo has
+# no age, so his age_group is null without an error.
+query CalculatedFieldError {
+  people(query: {filter: "age < 20 OR age = NULL"}) {
+    items {
+      name
+      age
+      age_group
+    }
+  }
+}

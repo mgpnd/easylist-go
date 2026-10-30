@@ -59,6 +59,15 @@ const (
 	OpNotIn
 )
 
+var predicateOpNames = [...]string{
+	OpEq: "=", OpGt: ">", OpGte: ">=", OpLt: "<", OpLte: "<=",
+	OpContains: "CONTAINS", OpExcludes: "EXCLUDES", OpBetween: "BETWEEN",
+	OpNeq: "!=", OpIn: "IN", OpNotIn: "NOT IN",
+}
+
+// String returns the operator's canonical spelling, such as ">=" or "NOT IN".
+func (o PredicateOp) String() string { return enumName(predicateOpNames[:], int(o), "PredicateOp") }
+
 // LogicalOp identifies a logical connector.
 type LogicalOp uint8
 
@@ -66,6 +75,11 @@ const (
 	And LogicalOp = iota // AND binds more tightly than OR.
 	Or                   // OR.
 )
+
+var logicalOpNames = [...]string{And: "AND", Or: "OR"}
+
+// String returns the connector's canonical uppercase spelling, such as "AND".
+func (o LogicalOp) String() string { return enumName(logicalOpNames[:], int(o), "LogicalOp") }
 
 // LiteralKind identifies a literal's syntax, before schema-based conversion.
 type LiteralKind uint8

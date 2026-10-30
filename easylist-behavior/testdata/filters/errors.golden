@@ -1,0 +1,95 @@
+# Missing value
+age >
+=> error: unexpected end of input, expected string, number, boolean, time keyword, or '{' at position 6
+
+# Dangling AND
+age > 30 AND
+=> error: unexpected end of input, expected field or '(' at position 13
+
+# A comma outside a list
+age = 1, name = 'x'
+=> error: unexpected ',' at position 8
+
+# Unknown field
+nope = 1
+=> error: unknown field "nope" at position 1
+
+# Calculated fields cannot be filtered on
+display = 'Ann Lee'
+=> error: cannot filter on calculated field "display" at position 1
+
+# > is not supported on a boolean field
+active > TRUE
+=> error: unsupported operator ">" for field "active" at position 8
+
+# CONTAINS is not supported on an enum field
+plan CONTAINS 'pr'
+=> error: unsupported operator "CONTAINS" for field "plan" at position 6
+
+# IN is rejected on arrays
+tags IN ('go')
+=> error: unsupported operator "IN" for field "tags" at position 6
+
+# Scalar text rejects a list after CONTAINS
+name CONTAINS ('a', 'b')
+=> error: operator "CONTAINS" on text field "name" does not accept a value list at position 15
+
+# An undeclared enum value
+plan = 'gold'
+=> error: invalid enum value "gold" for field "plan" at position 8: not a declared value
+
+# A malformed uuid
+uid = 'not-a-uuid'
+=> error: invalid uuid value "not-a-uuid" for field "uid" at position 7
+
+# A timestamp needs an offset
+created_at > '2026-10-27T10:00:00'
+=> error: invalid timestamp value "2026-10-27T10:00:00" for field "created_at" at position 14: timestamps need an offset such as Z or +02:00
+
+# An impossible date
+due = '2026-02-30'
+=> error: invalid date value "2026-02-30" for field "due" at position 7
+
+# An integer field rejects a decimal
+age = 30.5
+=> error: invalid integer value "30.5" for field "age" at position 7
+
+# A quoted number is not trimmed
+age = ' 30'
+=> error: invalid integer value " 30" for field "age" at position 7
+
+# A boolean field needs TRUE or FALSE, not a string
+active = 'true'
+=> error: invalid boolean value "true" for field "active" at position 10
+
+# NULL only goes with = and !=
+age > NULL
+=> error: unexpected NULL, expected string, number, boolean, time keyword, or '{' at position 7
+
+# A time keyword on a text field
+name = TODAY
+=> error: cannot compare text field "name" with a date at position 8
+
+# An unknown word on the value side
+due = tomorrow
+=> error: unknown time keyword 'tomorrow' at position 7
+
+# The quoted BETWEEN form needs a comma
+age BETWEEN '30'
+=> error: BETWEEN requires two quoted comma-separated bounds at position 13
+
+# BETWEEN is not supported on text
+name BETWEEN ('a', 'b')
+=> error: unsupported operator "BETWEEN" for field "name" at position 6
+
+# An empty item in an array's quoted list
+tags CONTAINS 'go,,sql'
+=> error: empty item in the value list for field "tags" at position 15
+
+# CONTAINS takes no relative value, on any field
+holidays CONTAINS TODAY
+=> error: unexpected identifier, expected string, number, boolean, or '(' at position 19
+
+# Quoted identifiers keep their case
+"Age" > 30
+=> error: unknown field "Age" at position 1

@@ -1,0 +1,40 @@
+{
+  "errors": [
+    {
+      "message": "calculated field \"age_group\": age -1 is negative",
+      "path": [
+        "people",
+        "items",
+        1,
+        "age_group"
+      ],
+      "locations": [
+        {
+          "line": 10,
+          "column": 7
+        }
+      ]
+    }
+  ],
+  "data": {
+    "people": {
+      "items": [
+        {
+          "name": "Ivan Petrov",
+          "age": 17,
+          "age_group": "minor"
+        },
+        {
+          "name": "Kai Becker",
+          "age": -1,
+          "age_group": null
+        },
+        {
+          "name": "Mo Reyes",
+          "age": null,
+          "age_group": null
+        }
+      ]
+    }
+  }
+}

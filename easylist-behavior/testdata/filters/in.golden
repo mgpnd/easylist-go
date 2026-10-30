@@ -1,0 +1,140 @@
+# IN on an enum field
+plan IN ('pro', 'team')
+=> 7 rows
+  id | name        | plan
+   1 | Ann Lee     | pro
+   3 | Cara Diaz   | team
+   5 | Eve Martin  | pro
+   6 | Finn Larsen | team
+   8 | Hana Sato   | team
+  10 | Jade Wong   | pro
+  12 | Lena Novak  | pro
+
+# NOT IN on an enum field
+plan NOT IN ('free')
+=> 7 rows
+  id | name        | plan
+   1 | Ann Lee     | pro
+   3 | Cara Diaz   | team
+   5 | Eve Martin  | pro
+   6 | Finn Larsen | team
+   8 | Hana Sato   | team
+  10 | Jade Wong   | pro
+  12 | Lena Novak  | pro
+
+# IN on a joined field
+country IN ('France', 'Japan')
+=> 5 rows
+  id | name       | country
+   1 | Ann Lee    | France
+   2 | Bob Stone  | Japan
+   5 | Eve Martin | France
+   8 | Hana Sato  | Japan
+  10 | Jade Wong  | Japan
+
+# NOT IN keeps rows where the field is NULL
+country NOT IN ('France', 'Germany')
+=> 7 rows
+  id | name       | country
+   2 | Bob Stone  | Japan
+   3 | Cara Diaz  | Brazil
+   7 | Gil Moreau | NULL
+   8 | Hana Sato  | Japan
+  10 | Jade Wong  | Japan
+  12 | Lena Novak | Brazil
+  13 | Mo Reyes   | NULL
+
+# ... unless the list holds NULL
+country NOT IN ('France', NULL)
+=> 9 rows
+  id | name        | country
+   2 | Bob Stone   | Japan
+   3 | Cara Diaz   | Brazil
+   4 | Dan O'Brien | Germany
+   6 | Finn Larsen | Germany
+   8 | Hana Sato   | Japan
+   9 | Ivan Petrov | Germany
+  10 | Jade Wong   | Japan
+  11 | Kai Becker  | Germany
+  12 | Lena Novak  | Brazil
+
+# A NULL item in IN matches NULL rows
+country IN ('Brazil', NULL)
+=> 4 rows
+  id | name       | country
+   3 | Cara Diaz  | Brazil
+   7 | Gil Moreau | NULL
+  12 | Lena Novak | Brazil
+  13 | Mo Reyes   | NULL
+
+# IN on an integer field, quoted and unquoted numbers mixed
+age IN (17, '30', 99)
+=> 2 rows
+  id | name        | age
+   9 | Ivan Petrov |  17
+  10 | Jade Wong   |  30
+
+# NOT IN on a float field keeps NULL heights
+height NOT IN (1.6, 1.8)
+=> 11 rows
+  id | name        | height
+   1 | Ann Lee     |   1.68
+   2 | Bob Stone   |   1.82
+   4 | Dan O'Brien |   NULL
+   5 | Eve Martin  |   1.75
+   6 | Finn Larsen |   1.91
+   7 | Gil Moreau  |    1.7
+   8 | Hana Sato   |   1.58
+   9 | Ivan Petrov |   1.77
+  10 | Jade Wong   |   1.65
+  12 | Lena Novak  |   1.72
+  13 | Mo Reyes    |   NULL
+
+# IN on a boolean field with NULL
+active IN (TRUE, NULL)
+=> 9 rows
+  id | name        | active
+   1 | Ann Lee     | true
+   3 | Cara Diaz   | true
+   4 | Dan O'Brien | NULL
+   5 | Eve Martin  | true
+   7 | Gil Moreau  | NULL
+   8 | Hana Sato   | true
+   9 | Ivan Petrov | true
+  11 | Kai Becker  | true
+  13 | Mo Reyes    | NULL
+
+# IN on a uuid field
+uid IN ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000013')
+=> 2 rows
+  id | name     | uid
+   1 | Ann Lee  | 00000000-0000-4000-8000-000000000001
+  13 | Mo Reyes | 00000000-0000-4000-8000-000000000013
+
+# IN on a date field
+due IN ('2026-10-27', '2026-10-30')
+=> 2 rows
+  id | name      | due
+   1 | Ann Lee   | 2026-10-27
+   8 | Hana Sato | 2026-10-30
+
+# IN on a timestamp field compares instants
+created_at IN ('2026-10-27T09:30:00Z', '2026-10-20T13:00:00+02:00')
+=> 2 rows
+  id | name       | created_at
+  11 | Kai Becker | 2026-10-20T11:00:00Z
+  12 | Lena Novak | 2026-10-27T09:30:00Z
+
+# IN on text is exact and case-sensitive
+name IN ('Ann Lee', 'bob stone')
+=> 1 row
+  id | name
+   1 | Ann Lee
+
+# not in, in lower case
+plan not in ('free', 'pro')
+=> 3 rows
+  id | name        | plan
+   3 | Cara Diaz   | team
+   6 | Finn Larsen | team
+   8 | Hana Sato   | team

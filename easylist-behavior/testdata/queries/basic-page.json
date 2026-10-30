@@ -1,0 +1,29 @@
+{
+  "data": {
+    "people": {
+      "totalCount": 4,
+      "items": [
+        {
+          "id": 1,
+          "name": "Ann Lee",
+          "country": "France"
+        },
+        {
+          "id": 5,
+          "name": "Eve Martin",
+          "country": "France"
+        },
+        {
+          "id": 10,
+          "name": "Jade Wong",
+          "country": "Japan"
+        },
+        {
+          "id": 12,
+          "name": "Lena Novak",
+          "country": "Brazil"
+        }
+      ]
+    }
+  }
+}

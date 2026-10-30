@@ -1,0 +1,12 @@
+# A basic page: the people on the pro plan, in the default order (by id),
+# with the total count of matching rows.
+query BasicPage {
+  people(query: {filter: "plan = 'pro'"}) {
+    totalCount
+    items {
+      id
+      name
+      country
+    }
+  }
+}

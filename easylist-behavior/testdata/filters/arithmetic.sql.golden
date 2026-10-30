@@ -1,0 +1,98 @@
+# Multiplication on an integer field
+age > {10 * 3}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(30), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1
+  args: [int64(30)]
+
+# Division that comes out whole
+age = {60 / 2}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(30), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" = $1
+  args: [int64(30)]
+
+# Subtraction
+age < {20 - 2}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" < $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(18), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" < $1
+  args: [int64(18)]
+
+# Unary minus
+age <= {-1}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" <= $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(-1), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" <= $1
+  args: [int64(-1)]
+
+# * binds more tightly than +
+balance > {1000 + 0.5 * 2}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."balance" AS "balance" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" > $1::numeric ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["1001", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" > $1::numeric
+  args: ["1001"]
+
+# A decimal quotient on a float field
+height > {3.6 / 2}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."height" AS "height" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [float64(1.8), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" > $1
+  args: [float64(1.8)]
+
+# :: binds most tightly: 2 * (3::DAYS)
+due = {TODAY + 2 * 3::DAYS}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."due" AS "due" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-11-02T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" = $1
+  args: [time(2026-11-02T00:00:00Z)]
+
+# Subtracting a negated duration adds it
+due = {END_OF_WEEK - -1::DAYS}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."due" AS "due" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-11-02T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" = $1
+  args: [time(2026-11-02T00:00:00Z)]
+
+# A duration divided by an integer
+due = {TODAY + 6::BUSINESS_DAYS / 2}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."due" AS "due" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-10-30T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" = $1
+  args: [time(2026-10-30T00:00:00Z)]
+
+# Parentheses group durations of different units
+last_seen > {NOW - (1::HOURS + 30::MINUTES)}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."last_seen" AS "last_seen" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."last_seen" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-10-27T08:30:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."last_seen" > $1
+  args: [time(2026-10-27T08:30:00Z)]
+
+# A date plus hours is a timestamp
+last_seen >= {TODAY + 9::HOURS}
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."last_seen" AS "last_seen" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."last_seen" >= $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-10-27T09:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."last_seen" >= $1
+  args: [time(2026-10-27T09:00:00Z)]

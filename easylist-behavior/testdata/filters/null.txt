@@ -1,0 +1,38 @@
+# = NULL matches rows where the field is NULL
+nickname = NULL
+
+# != NULL matches the rest
+nickname != NULL
+
+# != keeps NULL rows
+active != TRUE
+
+# = never matches NULL rows
+active = FALSE
+
+# > never matches NULL rows, and age is NULL only for Mo
+age > 0
+
+# != on a joined field keeps rows with no country
+country != 'France'
+
+# ... unless NULLs are excluded explicitly
+country != 'France' AND country != NULL
+
+# = NULL on a joined field: no country
+country = NULL
+
+# A lateral field is NULL when the person has no order
+last_order_at = NULL
+
+# The aggregate count is never NULL
+order_count = NULL
+
+# = NULL on a field that is not nullable is accepted and matches nothing
+name = NULL
+
+# EXCLUDES on scalar text matches NULL rows too
+nickname EXCLUDES 'e'
+
+# The keyword NULL is case-insensitive
+due = null

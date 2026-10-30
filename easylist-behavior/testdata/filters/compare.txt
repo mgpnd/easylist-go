@@ -1,0 +1,56 @@
+# > on an integer field never matches NULL ages
+age > 30
+
+# >= includes the bound
+age >= 30
+
+# < with a signed negative number
+age < 0
+
+# <= on an integer field
+age <= 17
+
+# = on an integer field
+age = 30
+
+# A quoted number on an integer field still compares numerically
+age > '60'
+
+# A quoted identifier names the same field
+"age" >= 61
+
+# > on a float field
+height > 1.8
+
+# <= on a float field, where 1.6 is stored as a double
+height <= 1.6
+
+# > on a numeric field
+balance > 1000
+
+# Numeric equality ignores trailing zeros: 15 equals 15.00
+balance = '15.00'
+
+# = on a boolean field
+active = FALSE
+
+# = on an enum field
+plan = 'team'
+
+# = on a uuid field
+uid = '00000000-0000-4000-8000-000000000003'
+
+# > on a date field
+due > '2026-11-02'
+
+# < on a timestamp field with an explicit offset
+created_at < '2024-01-01T00:00:00Z'
+
+# A date string is not a timestamp; only relative dates cover a whole day
+created_at = '2026-10-27'
+
+# A field from a lateral join
+order_count >= 3
+
+# A timestamp from a lateral join
+last_order_at > '2026-10-27T09:00:00+00:00'

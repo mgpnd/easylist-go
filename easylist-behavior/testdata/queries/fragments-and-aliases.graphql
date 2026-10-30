@@ -1,0 +1,20 @@
+# Fields selected through a named fragment, an inline fragment, and aliases,
+# including an alias on the list field itself. __typename is answered by the
+# server without being queried.
+query FragmentsAndAliases {
+  germans: people(query: {filter: "country_code = 'DE'"}) {
+    total: totalCount
+    items {
+      __typename
+      ...Who
+      ... on PeopleRow {
+        years: age
+      }
+    }
+  }
+}
+
+fragment Who on PeopleRow {
+  fullName: name
+  nickname
+}

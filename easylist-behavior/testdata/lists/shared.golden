@@ -1,0 +1,23 @@
+enum SortDirection {
+  ASC
+  DESC
+}
+
+enum ExportFormat {
+  CSV
+  XLSX
+}
+
+type ExportJob {
+  id: ID!
+}
+
+scalar Int64
+
+scalar Decimal
+
+scalar Date
+
+scalar UUID
+
+scalar Time

@@ -1,0 +1,53 @@
+# TODAY on a date field
+due = TODAY
+
+# The current week, Monday to Sunday
+due >= START_OF_WEEK AND due <= END_OF_WEEK
+
+# The current month
+due >= START_OF_MONTH AND due <= END_OF_MONTH
+
+# The current year
+due >= START_OF_YEAR AND due <= END_OF_YEAR
+
+# Business days skip the weekend: Tuesday + 3 is Friday
+due = {TODAY + 3::BUSINESS_DAYS}
+
+# ... and Tuesday + 5 is the next Tuesday
+due = {TODAY + 5::BUSINESS_DAYS}
+
+# NOW minus minutes on a timestamp field
+last_seen > {NOW - 30::MINUTES}
+
+# NOW minus hours
+last_seen > {NOW - 2::HOURS}
+
+# TODAY on a timestamp field is the whole day
+last_seen = TODAY
+
+# != TODAY on a timestamp field keeps NULL rows
+last_seen != TODAY
+
+# >= a date on a timestamp field starts at midnight
+last_seen >= START_OF_WEEK
+
+# <= a date on a timestamp field includes that whole day: Eve at 23:59:59
+last_seen <= {TODAY - 1::DAYS}
+
+# The current month on a timestamp field
+last_seen >= START_OF_MONTH AND last_seen <= END_OF_MONTH
+
+# < START_OF_YEAR on a timestamp field
+last_seen < START_OF_YEAR
+
+# DAYS on a timestamp field
+created_at >= {TODAY - 7::DAYS}
+
+# NOW minus an hour
+created_at > {NOW - 1::HOURS}
+
+# A relative value on a lateral field
+last_order_at > {NOW - 1::HOURS}
+
+# Keywords are case-insensitive
+due = today
