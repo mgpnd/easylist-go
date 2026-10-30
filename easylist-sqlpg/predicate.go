@@ -318,31 +318,34 @@ func listArguments(field easylist.PlanField, list filter.Literal, allowNull bool
 
 // predicateArgument converts a single scalar value. Numeric values keep
 // arbitrary precision decimal strings intact and carry PostgreSQL's cast.
+// Number fields also take a quoted number, untrimmed and checked exactly like
+// an unquoted one.
 func predicateArgument(field easylist.PlanField, valueKind filter.LiteralKind, text string, pos int) (Arg, error) {
 	invalid := func(reason string) (Arg, error) {
 		return Arg{}, fmt.Errorf("invalid %s value %q for field %q at position %d%s", field.Type, text, field.Name, pos, reason)
 	}
+	number := valueKind == filter.LiteralNumber || valueKind == filter.LiteralString
 	switch field.Type {
 	case easylist.Text:
 		if valueKind == filter.LiteralString {
 			return Arg{Value: text}, nil
 		}
 	case easylist.Integer:
-		if valueKind == filter.LiteralNumber {
+		if number {
 			parsed, err := strconv.ParseInt(text, 10, 64)
 			if err == nil {
 				return Arg{Value: parsed}, nil
 			}
 		}
 	case easylist.Float:
-		if valueKind == filter.LiteralNumber && predicateNumber.MatchString(text) {
+		if number && predicateNumber.MatchString(text) {
 			parsed, err := strconv.ParseFloat(text, 64)
 			if err == nil && !math.IsInf(parsed, 0) && !math.IsNaN(parsed) {
 				return Arg{Value: parsed}, nil
 			}
 		}
 	case easylist.Numeric:
-		if valueKind == filter.LiteralNumber && predicateNumber.MatchString(text) {
+		if number && predicateNumber.MatchString(text) {
 			return Arg{Value: text, Cast: CastNumeric}, nil
 		}
 	case easylist.Date:
