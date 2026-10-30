@@ -1,0 +1,11 @@
+# A filter with a syntax error fails the list field before any query runs.
+# The error message holds the position in the filter. people is non-null,
+# so data is null.
+query FilterSyntaxError {
+  people(query: {filter: "age > 30 AND"}) {
+    totalCount
+    items {
+      name
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# The second list, countries, sorted by name. Canada has no people, which
+# does not matter to a plain list.
+query Countries {
+  countries(query: {sort: [{field: NAME}]}) {
+    totalCount
+    items {
+      id
+      name
+      code
+    }
+  }
+}

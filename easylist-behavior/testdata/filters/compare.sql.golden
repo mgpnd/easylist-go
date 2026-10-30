@@ -1,0 +1,169 @@
+# > on an integer field never matches NULL ages
+age > 30
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(30), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1
+  args: [int64(30)]
+
+# >= includes the bound
+age >= 30
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" >= $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(30), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" >= $1
+  args: [int64(30)]
+
+# < with a signed negative number
+age < 0
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" < $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(0), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" < $1
+  args: [int64(0)]
+
+# <= on an integer field
+age <= 17
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" <= $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(17), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" <= $1
+  args: [int64(17)]
+
+# = on an integer field
+age = 30
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(30), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" = $1
+  args: [int64(30)]
+
+# A quoted number on an integer field still compares numerically
+age > '60'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(60), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1
+  args: [int64(60)]
+
+# A quoted identifier names the same field
+"age" >= 61
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" >= $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(61), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" >= $1
+  args: [int64(61)]
+
+# > on a float field
+height > 1.8
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."height" AS "height" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [float64(1.8), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" > $1
+  args: [float64(1.8)]
+
+# <= on a float field, where 1.6 is stored as a double
+height <= 1.6
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."height" AS "height" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" <= $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [float64(1.6), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" <= $1
+  args: [float64(1.6)]
+
+# > on a numeric field
+balance > 1000
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."balance" AS "balance" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" > $1::numeric ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["1000", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" > $1::numeric
+  args: ["1000"]
+
+# Numeric equality ignores trailing zeros: 15 equals 15.00
+balance = '15.00'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."balance" AS "balance" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" = $1::numeric ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["15.00", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" = $1::numeric
+  args: ["15.00"]
+
+# = on a boolean field
+active = FALSE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."active" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [false, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."active" = $1
+  args: [false]
+
+# = on an enum field
+plan = 'team'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."plan" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["team", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."plan" = $1
+  args: ["team"]
+
+# = on a uuid field
+uid = '00000000-0000-4000-8000-000000000003'
+=> page
+  SELECT p."id" AS "id", p."uid" AS "uid", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."uid" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["00000000-0000-4000-8000-000000000003", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."uid" = $1
+  args: ["00000000-0000-4000-8000-000000000003"]
+
+# > on a date field
+due > '2026-11-02'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."due" AS "due" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-11-02T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" > $1
+  args: [time(2026-11-02T00:00:00Z)]
+
+# < on a timestamp field with an explicit offset
+created_at < '2024-01-01T00:00:00Z'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."created_at" AS "created_at" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."created_at" < $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2024-01-01T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."created_at" < $1
+  args: [time(2024-01-01T00:00:00Z)]
+
+# A field from a lateral join
+order_count >= 3
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", ord.order_count AS "order_count" FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.order_count) >= $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(3), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.order_count) >= $1
+  args: [int64(3)]
+
+# A timestamp from a lateral join
+last_order_at > '2026-10-27T09:00:00+00:00'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", ord.last_order_at AS "last_order_at" FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.last_order_at) > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-10-27T09:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.last_order_at) > $1
+  args: [time(2026-10-27T09:00:00Z)]

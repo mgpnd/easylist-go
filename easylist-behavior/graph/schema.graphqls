@@ -1,0 +1,6 @@
+# The snapshot server's schema. The easylist plugin adds every list type;
+# this file only attaches the lists to Query.
+type Query {
+  people(query: PeopleListInput!): PeoplePage!
+  countries(query: CountriesListInput!): CountriesPage!
+}

@@ -1,0 +1,32 @@
+# BETWEEN with a list includes both bounds
+age BETWEEN (30, 40)
+
+# BETWEEN with a quoted string
+age BETWEEN '30,40'
+
+# The quoted form trims its bounds
+age BETWEEN ' 30 , 40 '
+
+# List bounds may be quoted numbers on a number field
+age BETWEEN ('30', '40')
+
+# Bounds in the wrong order match nothing
+age BETWEEN (40, 30)
+
+# BETWEEN on a float field
+height BETWEEN (1.6, 1.7)
+
+# BETWEEN on a numeric field with a negative bound
+balance BETWEEN '-50,0.10'
+
+# BETWEEN on a date field
+due BETWEEN ('2026-10-26', '2026-11-01')
+
+# BETWEEN on a timestamp field with timestamps
+created_at BETWEEN ('2026-10-20T11:00:00Z', '2026-10-27T09:30:00Z')
+
+# Date strings are not timestamps, in BETWEEN either
+created_at BETWEEN '2026-10-20,2026-10-27'
+
+# BETWEEN on a lateral field
+order_count BETWEEN (1, 2)

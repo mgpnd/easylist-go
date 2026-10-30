@@ -1,0 +1,124 @@
+# = NULL matches rows where the field is NULL
+nickname = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."nickname" AS "nickname" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" IS NULL
+  args: []
+
+# != NULL matches the rest
+nickname != NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."nickname" AS "nickname" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" IS NOT NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" IS NOT NULL
+  args: []
+
+# != keeps NULL rows
+active != TRUE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."active" IS DISTINCT FROM $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [true, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."active" IS DISTINCT FROM $1
+  args: [true]
+
+# = never matches NULL rows
+active = FALSE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."active" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [false, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."active" = $1
+  args: [false]
+
+# > never matches NULL rows, and age is NULL only for Mo
+age > 0
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(0), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1
+  args: [int64(0)]
+
+# != on a joined field keeps rows with no country
+country != 'France'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) IS DISTINCT FROM $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["France", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) IS DISTINCT FROM $1
+  args: ["France"]
+
+# ... unless NULLs are excluded explicitly
+country != 'France' AND country != NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND ((c.name) IS DISTINCT FROM $1 AND (c.name) IS NOT NULL) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["France", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND ((c.name) IS DISTINCT FROM $1 AND (c.name) IS NOT NULL)
+  args: ["France"]
+
+# = NULL on a joined field: no country
+country = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) IS NULL
+  args: []
+
+# A lateral field is NULL when the person has no order
+last_order_at = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", ord.last_order_at AS "last_order_at" FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.last_order_at) IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.last_order_at) IS NULL
+  args: []
+
+# The aggregate count is never NULL
+order_count = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", ord.order_count AS "order_count" FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.order_count) IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.order_count) IS NULL
+  args: []
+
+# = NULL on a field that is not nullable is accepted and matches nothing
+name = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" IS NULL
+  args: []
+
+# EXCLUDES on scalar text matches NULL rows too
+nickname EXCLUDES 'e'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."nickname" AS "nickname" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."nickname" NOT ILIKE $1 ESCAPE E'\\', TRUE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%e%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."nickname" NOT ILIKE $1 ESCAPE E'\\', TRUE)
+  args: ["%e%"]
+
+# The keyword NULL is case-insensitive
+due = null
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."due" AS "due" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" IS NULL
+  args: []

@@ -1,0 +1,15 @@
+# Calculated fields of every kind: display (text, from name and the joined
+# country), tier (an enum, from the lateral order_count), and labels (a
+# text array, from plan and roles). Only the calculated fields are selected
+# besides name, so their source fields are queried without being returned.
+query CalculatedFields {
+  people(query: {filter: "id <= 7"}) {
+    totalCount
+    items {
+      name
+      display
+      tier
+      labels
+    }
+  }
+}

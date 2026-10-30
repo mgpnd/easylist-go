@@ -1,0 +1,181 @@
+# CONTAINS on a text array is exact and case-sensitive
+tags CONTAINS 'go'
+=> 4 rows
+  id | name      | tags
+   1 | Ann Lee   | [go, sql]
+   3 | Cara Diaz | [rust, go]
+   8 | Hana Sato | [go, python, sql]
+  10 | Jade Wong | [design, go]
+
+# ... so 'Go' matches only Bob
+tags CONTAINS 'Go'
+=> 1 row
+  id | name      | tags
+   2 | Bob Stone | [Go]
+
+# On an array, a quoted string is a list of required elements
+tags CONTAINS 'go, sql'
+=> 2 rows
+  id | name      | tags
+   1 | Ann Lee   | [go, sql]
+   8 | Hana Sato | [go, python, sql]
+
+# The list form requires every item too
+tags CONTAINS ('go', 'sql')
+=> 2 rows
+  id | name      | tags
+   1 | Ann Lee   | [go, sql]
+   8 | Hana Sato | [go, python, sql]
+
+# List items are never split, so this needs an element "go,sql"
+tags CONTAINS ('go,sql')
+=> 0 rows
+
+# EXCLUDES matches empty and NULL arrays
+tags EXCLUDES 'go'
+=> 9 rows
+  id | name        | tags
+   2 | Bob Stone   | [Go]
+   4 | Dan O'Brien | []
+   5 | Eve Martin  | NULL
+   6 | Finn Larsen | [sql]
+   7 | Gil Moreau  | [travel]
+   9 | Ivan Petrov | [python]
+  11 | Kai Becker  | []
+  12 | Lena Novak  | [sql, design]
+  13 | Mo Reyes    | NULL
+
+# EXCLUDES with a list leaves out rows holding any item
+tags EXCLUDES ('go', 'python')
+=> 8 rows
+  id | name        | tags
+   2 | Bob Stone   | [Go]
+   4 | Dan O'Brien | []
+   5 | Eve Martin  | NULL
+   6 | Finn Larsen | [sql]
+   7 | Gil Moreau  | [travel]
+  11 | Kai Becker  | []
+  12 | Lena Novak  | [sql, design]
+  13 | Mo Reyes    | NULL
+
+# = NULL tests the array itself; an empty array is not NULL
+tags = NULL
+=> 2 rows
+  id | name       | tags
+   5 | Eve Martin | NULL
+  13 | Mo Reyes   | NULL
+
+# != NULL keeps empty arrays
+lucky_numbers != NULL
+=> 10 rows
+  id | name        | lucky_numbers
+   1 | Ann Lee     | [7, 13]
+   2 | Bob Stone   | [7]
+   3 | Cara Diaz   | [3, 5, 8]
+   4 | Dan O'Brien | []
+   6 | Finn Larsen | [42]
+   7 | Gil Moreau  | [13]
+   8 | Hana Sato   | [1, 2, 3]
+   9 | Ivan Petrov | [17]
+  10 | Jade Wong   | [8]
+  12 | Lena Novak  | [99]
+
+# An integer array with a single number
+lucky_numbers CONTAINS 7
+=> 2 rows
+  id | name      | lucky_numbers
+   1 | Ann Lee   | [7, 13]
+   2 | Bob Stone | [7]
+
+# An integer array with a quoted list
+lucky_numbers CONTAINS '1, 3'
+=> 1 row
+  id | name      | lucky_numbers
+   8 | Hana Sato | [1, 2, 3]
+
+# A float array
+ratings CONTAINS 4.5
+=> 2 rows
+  id | name      | ratings
+   1 | Ann Lee   | [4.5, 5]
+   8 | Hana Sato | [5, 5, 4.5]
+
+# A numeric array compares numerically: 5 matches 5.00
+prices CONTAINS 5
+=> 1 row
+  id | name        | prices
+   6 | Finn Larsen | [5.00, 5]
+
+# A numeric array with a quoted value
+prices CONTAINS '19.9'
+=> 1 row
+  id | name    | prices
+   1 | Ann Lee | [9.99, 19.90]
+
+# A boolean array
+answers CONTAINS FALSE
+=> 5 rows
+  id | name        | answers
+   2 | Bob Stone   | [false]
+   3 | Cara Diaz   | [true, false]
+   6 | Finn Larsen | [false, false]
+   9 | Ivan Petrov | [false, true]
+  12 | Lena Novak  | [false]
+
+# A boolean array with EXCLUDES
+answers EXCLUDES FALSE
+=> 8 rows
+  id | name        | answers
+   1 | Ann Lee     | [true, true]
+   4 | Dan O'Brien | []
+   5 | Eve Martin  | NULL
+   7 | Gil Moreau  | [true]
+   8 | Hana Sato   | [true, true, true]
+  10 | Jade Wong   | [true]
+  11 | Kai Becker  | []
+  13 | Mo Reyes    | NULL
+
+# A date array
+holidays CONTAINS '2026-12-24'
+=> 1 row
+  id | name    | holidays
+   1 | Ann Lee | [2026-10-27, 2026-12-24]
+
+# A timestamp array compares instants across offsets
+logins CONTAINS '2026-10-27T12:00:00+02:00'
+=> 1 row
+  id | name    | logins
+   1 | Ann Lee | [2026-10-26T08:00:00Z, 2026-10-27T10:00:00Z]
+
+# A uuid array
+friend_ids CONTAINS '00000000-0000-4000-8000-000000000001'
+=> 4 rows
+  id | name       | friend_ids
+   2 | Bob Stone  | [00000000-0000-4000-8000-000000000001]
+   3 | Cara Diaz  | [00000000-0000-4000-8000-000000000001, 00000000-0000-4000-8000-000000000008]
+   8 | Hana Sato  | [00000000-0000-4000-8000-000000000001, 00000000-0000-4000-8000-000000000003, 00000000-0000-4000-8000-000000000010]
+  12 | Lena Novak | [00000000-0000-4000-8000-000000000001, 00000000-0000-4000-8000-000000000002]
+
+# An enum array
+roles CONTAINS 'admin'
+=> 3 rows
+  id | name       | roles
+   1 | Ann Lee    | [admin]
+   8 | Hana Sato  | [admin, editor]
+  12 | Lena Novak | [admin]
+
+# An enum array with EXCLUDES and a list
+roles EXCLUDES ('admin', 'editor')
+=> 7 rows
+  id | name        | roles
+   4 | Dan O'Brien | []
+   5 | Eve Martin  | [viewer]
+   6 | Finn Larsen | [viewer]
+   7 | Gil Moreau  | []
+   9 | Ivan Petrov | [viewer]
+  11 | Kai Becker  | [viewer]
+  13 | Mo Reyes    | []
+
+# A non-nullable array is never NULL
+roles = NULL
+=> 0 rows

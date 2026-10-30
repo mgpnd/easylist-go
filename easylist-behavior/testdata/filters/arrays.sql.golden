@@ -1,0 +1,197 @@
+# CONTAINS on a text array is exact and case-sensitive
+tags CONTAINS 'go'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["go", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags"))
+  args: ["go"]
+
+# ... so 'Go' matches only Bob
+tags CONTAINS 'Go'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["Go", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags"))
+  args: ["Go"]
+
+# On an array, a quoted string is a list of required elements
+tags CONTAINS 'go, sql'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags") AND $2 = ANY(p."tags")) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["go", "sql", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags") AND $2 = ANY(p."tags"))
+  args: ["go", "sql"]
+
+# The list form requires every item too
+tags CONTAINS ('go', 'sql')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags") AND $2 = ANY(p."tags")) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["go", "sql", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags") AND $2 = ANY(p."tags"))
+  args: ["go", "sql"]
+
+# List items are never split, so this needs an element "go,sql"
+tags CONTAINS ('go,sql')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["go,sql", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."tags"))
+  args: ["go,sql"]
+
+# EXCLUDES matches empty and NULL arrays
+tags EXCLUDES 'go'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."tags")), TRUE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["go", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."tags")), TRUE)
+  args: ["go"]
+
+# EXCLUDES with a list leaves out rows holding any item
+tags EXCLUDES ('go', 'python')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."tags") OR $2 = ANY(p."tags")), TRUE) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["go", "python", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."tags") OR $2 = ANY(p."tags")), TRUE)
+  args: ["go", "python"]
+
+# = NULL tests the array itself; an empty array is not NULL
+tags = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."tags")::text AS "tags" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."tags" IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."tags" IS NULL
+  args: []
+
+# != NULL keeps empty arrays
+lucky_numbers != NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."lucky_numbers")::text AS "lucky_numbers" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."lucky_numbers" IS NOT NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."lucky_numbers" IS NOT NULL
+  args: []
+
+# An integer array with a single number
+lucky_numbers CONTAINS 7
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."lucky_numbers")::text AS "lucky_numbers" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."lucky_numbers")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(7), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."lucky_numbers"))
+  args: [int64(7)]
+
+# An integer array with a quoted list
+lucky_numbers CONTAINS '1, 3'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."lucky_numbers")::text AS "lucky_numbers" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."lucky_numbers") AND $2 = ANY(p."lucky_numbers")) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [int64(1), int64(3), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."lucky_numbers") AND $2 = ANY(p."lucky_numbers"))
+  args: [int64(1), int64(3)]
+
+# A float array
+ratings CONTAINS 4.5
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."ratings")::text AS "ratings" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."ratings")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [float64(4.5), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."ratings"))
+  args: [float64(4.5)]
+
+# A numeric array compares numerically: 5 matches 5.00
+prices CONTAINS 5
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."prices")::text AS "prices" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1::numeric = ANY(p."prices")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["5", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1::numeric = ANY(p."prices"))
+  args: ["5"]
+
+# A numeric array with a quoted value
+prices CONTAINS '19.9'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."prices")::text AS "prices" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1::numeric = ANY(p."prices")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["19.9", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1::numeric = ANY(p."prices"))
+  args: ["19.9"]
+
+# A boolean array
+answers CONTAINS FALSE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."answers")::text AS "answers" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."answers")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [false, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."answers"))
+  args: [false]
+
+# A boolean array with EXCLUDES
+answers EXCLUDES FALSE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."answers")::text AS "answers" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."answers")), TRUE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [false, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."answers")), TRUE)
+  args: [false]
+
+# A date array
+holidays CONTAINS '2026-12-24'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."holidays")::text AS "holidays" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."holidays")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-12-24T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."holidays"))
+  args: [time(2026-12-24T00:00:00Z)]
+
+# A timestamp array compares instants across offsets
+logins CONTAINS '2026-10-27T12:00:00+02:00'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."logins")::text AS "logins" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."logins")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [time(2026-10-27T10:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."logins"))
+  args: [time(2026-10-27T10:00:00Z)]
+
+# A uuid array
+friend_ids CONTAINS '00000000-0000-4000-8000-000000000001'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."friend_ids")::text AS "friend_ids" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."friend_ids")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["00000000-0000-4000-8000-000000000001", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."friend_ids"))
+  args: ["00000000-0000-4000-8000-000000000001"]
+
+# An enum array
+roles CONTAINS 'admin'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."roles")::text AS "roles" FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."roles")) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["admin", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ($1 = ANY(p."roles"))
+  args: ["admin"]
+
+# An enum array with EXCLUDES and a list
+roles EXCLUDES ('admin', 'editor')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."roles")::text AS "roles" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."roles") OR $2 = ANY(p."roles")), TRUE) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["admin", "editor", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(NOT ($1 = ANY(p."roles") OR $2 = ANY(p."roles")), TRUE)
+  args: ["admin", "editor"]
+
+# A non-nullable array is never NULL
+roles = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", to_json(p."roles")::text AS "roles" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."roles" IS NULL ORDER BY p."id" ASC LIMIT $1 OFFSET $2
+  args: [int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."roles" IS NULL
+  args: []

@@ -1,0 +1,125 @@
+# IN on an enum field
+plan IN ('pro', 'team')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."plan" IN ($1, $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["pro", "team", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."plan" IN ($1, $2)
+  args: ["pro", "team"]
+
+# NOT IN on an enum field
+plan NOT IN ('free')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."plan" NOT IN ($1), TRUE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["free", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."plan" NOT IN ($1), TRUE)
+  args: ["free"]
+
+# IN on a joined field
+country IN ('France', 'Japan')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) IN ($1, $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["France", "Japan", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) IN ($1, $2)
+  args: ["France", "Japan"]
+
+# NOT IN keeps rows where the field is NULL
+country NOT IN ('France', 'Germany')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND COALESCE((c.name) NOT IN ($1, $2), TRUE) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["France", "Germany", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND COALESCE((c.name) NOT IN ($1, $2), TRUE)
+  args: ["France", "Germany"]
+
+# ... unless the list holds NULL
+country NOT IN ('France', NULL)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND COALESCE((c.name) NOT IN ($1), FALSE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["France", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND COALESCE((c.name) NOT IN ($1), FALSE)
+  args: ["France"]
+
+# A NULL item in IN matches NULL rows
+country IN ('Brazil', NULL)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND COALESCE((c.name) IN ($1), TRUE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["Brazil", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND COALESCE((c.name) IN ($1), TRUE)
+  args: ["Brazil"]
+
+# IN on an integer field, quoted and unquoted numbers mixed
+age IN (17, '30', 99)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" IN ($1, $2, $3) ORDER BY p."id" ASC LIMIT $4 OFFSET $5
+  args: [int64(17), int64(30), int64(99), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" IN ($1, $2, $3)
+  args: [int64(17), int64(30), int64(99)]
+
+# NOT IN on a float field keeps NULL heights
+height NOT IN (1.6, 1.8)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."height" AS "height" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."height" NOT IN ($1, $2), TRUE) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [float64(1.6), float64(1.8), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."height" NOT IN ($1, $2), TRUE)
+  args: [float64(1.6), float64(1.8)]
+
+# IN on a boolean field with NULL
+active IN (TRUE, NULL)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."active" IN ($1), TRUE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [true, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."active" IN ($1), TRUE)
+  args: [true]
+
+# IN on a uuid field
+uid IN ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000013')
+=> page
+  SELECT p."id" AS "id", p."uid" AS "uid", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."uid" IN ($1, $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000013", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."uid" IN ($1, $2)
+  args: ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000013"]
+
+# IN on a date field
+due IN ('2026-10-27', '2026-10-30')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."due" AS "due" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" IN ($1, $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [time(2026-10-27T00:00:00Z), time(2026-10-30T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" IN ($1, $2)
+  args: [time(2026-10-27T00:00:00Z), time(2026-10-30T00:00:00Z)]
+
+# IN on a timestamp field compares instants
+created_at IN ('2026-10-27T09:30:00Z', '2026-10-20T13:00:00+02:00')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."created_at" AS "created_at" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."created_at" IN ($1, $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [time(2026-10-27T09:30:00Z), time(2026-10-20T11:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."created_at" IN ($1, $2)
+  args: [time(2026-10-27T09:30:00Z), time(2026-10-20T11:00:00Z)]
+
+# IN on text is exact and case-sensitive
+name IN ('Ann Lee', 'bob stone')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" IN ($1, $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["Ann Lee", "bob stone", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" IN ($1, $2)
+  args: ["Ann Lee", "bob stone"]
+
+# not in, in lower case
+plan not in ('free', 'pro')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."plan" NOT IN ($1, $2), TRUE) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["free", "pro", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."plan" NOT IN ($1, $2), TRUE)
+  args: ["free", "pro"]

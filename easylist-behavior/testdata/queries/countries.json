@@ -1,0 +1,34 @@
+{
+  "data": {
+    "countries": {
+      "totalCount": 5,
+      "items": [
+        {
+          "id": 4,
+          "name": "Brazil",
+          "code": "BR"
+        },
+        {
+          "id": 5,
+          "name": "Canada",
+          "code": "CA"
+        },
+        {
+          "id": 1,
+          "name": "France",
+          "code": "FR"
+        },
+        {
+          "id": 3,
+          "name": "Germany",
+          "code": "DE"
+        },
+        {
+          "id": 2,
+          "name": "Japan",
+          "code": "JP"
+        }
+      ]
+    }
+  }
+}

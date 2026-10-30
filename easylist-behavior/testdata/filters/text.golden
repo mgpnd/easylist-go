@@ -1,0 +1,101 @@
+# = on text is exact
+name = 'Ann Lee'
+=> 1 row
+  id | name
+   1 | Ann Lee
+
+# = on text is case-sensitive
+name = 'ann lee'
+=> 0 rows
+
+# != on a non-nullable text field
+name != 'Ann Lee'
+=> 12 rows
+  id | name
+   2 | Bob Stone
+   3 | Cara Diaz
+   4 | Dan O'Brien
+   5 | Eve Martin
+   6 | Finn Larsen
+   7 | Gil Moreau
+   8 | Hana Sato
+   9 | Ivan Petrov
+  10 | Jade Wong
+  11 | Kai Becker
+  12 | Lena Novak
+  13 | Mo Reyes
+
+# CONTAINS on text is a case-insensitive substring match
+name CONTAINS 'AN'
+=> 4 rows
+  id | name
+   1 | Ann Lee
+   4 | Dan O'Brien
+   8 | Hana Sato
+   9 | Ivan Petrov
+
+# EXCLUDES on text is its negation
+name EXCLUDES 'a'
+=> 2 rows
+  id | name
+   2 | Bob Stone
+  13 | Mo Reyes
+
+# A doubled quote is one quote
+name = 'Dan O''Brien'
+=> 1 row
+  id | name
+   4 | Dan O'Brien
+
+# CONTAINS finds a quote
+name CONTAINS ''''
+=> 1 row
+  id | name
+   4 | Dan O'Brien
+
+# LIKE wildcards are matched literally
+name CONTAINS '%'
+=> 0 rows
+
+# ... and so is the underscore
+name CONTAINS '_'
+=> 0 rows
+
+# A comma in scalar CONTAINS is literal; it does not split
+name CONTAINS 'a,b'
+=> 0 rows
+
+# CONTAINS never matches NULL nicknames
+nickname CONTAINS 'e'
+=> 4 rows
+  id | name       | nickname
+   1 | Ann Lee    | Annie
+   3 | Cara Diaz  | Cee
+   5 | Eve Martin | Evie
+  12 | Lena Novak | Len
+
+# CONTAINS on a joined field
+country CONTAINS 'an'
+=> 9 rows
+  id | name        | country
+   1 | Ann Lee     | France
+   2 | Bob Stone   | Japan
+   4 | Dan O'Brien | Germany
+   5 | Eve Martin  | France
+   6 | Finn Larsen | Germany
+   8 | Hana Sato   | Japan
+   9 | Ivan Petrov | Germany
+  10 | Jade Wong   | Japan
+  11 | Kai Becker  | Germany
+
+# = on a second joined field from the same join
+country_code = 'JP'
+=> 3 rows
+  id | name      | country_code
+   2 | Bob Stone | JP
+   8 | Hana Sato | JP
+  10 | Jade Wong | JP
+
+# A leading space is kept, so nothing matches
+nickname = ' Hana'
+=> 0 rows

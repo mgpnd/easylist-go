@@ -1,0 +1,101 @@
+# Multiplication on an integer field
+age > {10 * 3}
+=> 7 rows
+  id | name        | age
+   1 | Ann Lee     |  34
+   2 | Bob Stone   |  41
+   4 | Dan O'Brien |  52
+   6 | Finn Larsen |  67
+   7 | Gil Moreau  |  38
+   8 | Hana Sato   |  45
+  12 | Lena Novak  |  61
+
+# Division that comes out whole
+age = {60 / 2}
+=> 1 row
+  id | name      | age
+  10 | Jade Wong |  30
+
+# Subtraction
+age < {20 - 2}
+=> 2 rows
+  id | name        | age
+   9 | Ivan Petrov |  17
+  11 | Kai Becker  |  -1
+
+# Unary minus
+age <= {-1}
+=> 1 row
+  id | name       | age
+  11 | Kai Becker |  -1
+
+# * binds more tightly than +
+balance > {1000 + 0.5 * 2}
+=> 3 rows
+  id | name       |  balance
+   1 | Ann Lee    |  1250.00
+   8 | Hana Sato  |  2200.10
+  12 | Lena Novak | 10000.00
+
+# A decimal quotient on a float field
+height > {3.6 / 2}
+=> 2 rows
+  id | name        | height
+   2 | Bob Stone   |   1.82
+   6 | Finn Larsen |   1.91
+
+# A decimal result on an integer field is rejected
+age = {10 / 4}
+=> error: invalid integer value "2.5" for field "age" at position 7
+
+# A quotient with no finite decimal form is rejected
+balance = {1 / 3}
+=> error: quotient 1/3 has no finite decimal form at position 14
+
+# Division by zero is rejected
+age > {1 / 0}
+=> error: division by zero at position 10
+
+# :: binds most tightly: 2 * (3::DAYS)
+due = {TODAY + 2 * 3::DAYS}
+=> 1 row
+  id | name       | due
+  12 | Lena Novak | 2026-11-02
+
+# Subtracting a negated duration adds it
+due = {END_OF_WEEK - -1::DAYS}
+=> 1 row
+  id | name       | due
+  12 | Lena Novak | 2026-11-02
+
+# A duration divided by an integer
+due = {TODAY + 6::BUSINESS_DAYS / 2}
+=> 1 row
+  id | name      | due
+   8 | Hana Sato | 2026-10-30
+
+# Parentheses group durations of different units
+last_seen > {NOW - (1::HOURS + 30::MINUTES)}
+=> 2 rows
+  id | name      | last_seen
+   1 | Ann Lee   | 2026-10-27T10:00:00Z
+   2 | Bob Stone | 2026-10-27T09:45:00Z
+
+# A date plus hours is a timestamp
+last_seen >= {TODAY + 9::HOURS}
+=> 2 rows
+  id | name      | last_seen
+   1 | Ann Lee   | 2026-10-27T10:00:00Z
+   2 | Bob Stone | 2026-10-27T09:45:00Z
+
+# ... which a date field rejects
+due = {TODAY + 9::HOURS}
+=> error: cannot compare date field "due" with a timestamp at position 7
+
+# Time minus time is rejected
+last_seen > {NOW - TODAY}
+=> error: cannot apply - to a timestamp and a date at position 18
+
+# A bare duration is rejected
+due > {5::DAYS}
+=> error: expression is a duration, expected a number or a time at position 7

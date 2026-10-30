@@ -1,0 +1,111 @@
+# AND requires both sides
+plan = 'pro' AND active = TRUE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."plan" = $1 AND p."active" = $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["pro", true, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."plan" = $1 AND p."active" = $2)
+  args: ["pro", true]
+
+# OR accepts either side
+plan = 'pro' OR plan = 'team'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."plan" = $1 OR p."plan" = $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["pro", "team", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."plan" = $1 OR p."plan" = $2)
+  args: ["pro", "team"]
+
+# AND binds more tightly than OR
+plan = 'free' OR plan = 'pro' AND active = TRUE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."plan" = $1 OR (p."plan" = $2 AND p."active" = $3)) ORDER BY p."id" ASC LIMIT $4 OFFSET $5
+  args: ["free", "pro", true, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."plan" = $1 OR (p."plan" = $2 AND p."active" = $3))
+  args: ["free", "pro", true]
+
+# Parentheses override precedence
+(plan = 'free' OR plan = 'pro') AND active = TRUE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND ((p."plan" = $1 OR p."plan" = $2) AND p."active" = $3) ORDER BY p."id" ASC LIMIT $4 OFFSET $5
+  args: ["free", "pro", true, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ((p."plan" = $1 OR p."plan" = $2) AND p."active" = $3)
+  args: ["free", "pro", true]
+
+# Two groups joined by AND
+(country = 'Japan' OR country = 'Brazil') AND (age < 35 OR balance > 2000)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age", p."balance" AS "balance", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (((c.name) = $1 OR (c.name) = $2) AND (p."age" < $3 OR p."balance" > $4::numeric)) ORDER BY p."id" ASC LIMIT $5 OFFSET $6
+  args: ["Japan", "Brazil", int64(35), "2000", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (((c.name) = $1 OR (c.name) = $2) AND (p."age" < $3 OR p."balance" > $4::numeric))
+  args: ["Japan", "Brazil", int64(35), "2000"]
+
+# A chain of ANDs
+age > 20 AND age < 50 AND plan != 'free'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND ((p."age" > $1 AND p."age" < $2) AND p."plan" IS DISTINCT FROM $3) ORDER BY p."id" ASC LIMIT $4 OFFSET $5
+  args: [int64(20), int64(50), "free", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ((p."age" > $1 AND p."age" < $2) AND p."plan" IS DISTINCT FROM $3)
+  args: [int64(20), int64(50), "free"]
+
+# Neither TRUE nor FALSE: only NULL rows are left
+active != TRUE AND active != FALSE
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."active" AS "active" FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."active" IS DISTINCT FROM $1 AND p."active" IS DISTINCT FROM $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [true, false, int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."active" IS DISTINCT FROM $1 AND p."active" IS DISTINCT FROM $2)
+  args: [true, false]
+
+# Keywords are case-insensitive
+plan = 'team' and age > 50 or name = 'Mo Reyes'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND ((p."plan" = $1 AND p."age" > $2) OR p."name" = $3) ORDER BY p."id" ASC LIMIT $4 OFFSET $5
+  args: ["team", int64(50), "Mo Reyes", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND ((p."plan" = $1 AND p."age" > $2) OR p."name" = $3)
+  args: ["team", int64(50), "Mo Reyes"]
+
+# The scope still hides the soft-deleted Nora behind an OR
+name = 'Nora Quinn' OR plan = 'pro'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."plan" AS "plan" FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."name" = $1 OR p."plan" = $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["Nora Quinn", "pro", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND (p."name" = $1 OR p."plan" = $2)
+  args: ["Nora Quinn", "pro"]
+
+# Redundant parentheses
+((age > 60))
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(60), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" > $1
+  args: [int64(60)]
+
+# A joined field and a lateral field in one filter
+country = 'Japan' AND order_count > 0
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country", ord.order_count AS "order_count" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND ((c.name) = $1 AND (ord.order_count) > $2) ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["Japan", int64(0), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND ((c.name) = $1 AND (ord.order_count) > $2)
+  args: ["Japan", int64(0)]
+
+# OR across a NULL test and a comparison
+age > 60 OR country = NULL
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (p."age" > $1 OR (c.name) IS NULL) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [int64(60), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (p."age" > $1 OR (c.name) IS NULL)
+  args: [int64(60)]

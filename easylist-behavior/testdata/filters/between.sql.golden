@@ -1,0 +1,93 @@
+# BETWEEN with a list includes both bounds
+age BETWEEN (30, 40)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [int64(30), int64(40), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2
+  args: [int64(30), int64(40)]
+
+# BETWEEN with a quoted string
+age BETWEEN '30,40'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [int64(30), int64(40), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2
+  args: [int64(30), int64(40)]
+
+# The quoted form trims its bounds
+age BETWEEN ' 30 , 40 '
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [int64(30), int64(40), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2
+  args: [int64(30), int64(40)]
+
+# List bounds may be quoted numbers on a number field
+age BETWEEN ('30', '40')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [int64(30), int64(40), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2
+  args: [int64(30), int64(40)]
+
+# Bounds in the wrong order match nothing
+age BETWEEN (40, 30)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."age" AS "age" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [int64(40), int64(30), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."age" BETWEEN $1 AND $2
+  args: [int64(40), int64(30)]
+
+# BETWEEN on a float field
+height BETWEEN (1.6, 1.7)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."height" AS "height" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [float64(1.6), float64(1.7), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."height" BETWEEN $1 AND $2
+  args: [float64(1.6), float64(1.7)]
+
+# BETWEEN on a numeric field with a negative bound
+balance BETWEEN '-50,0.10'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."balance" AS "balance" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" BETWEEN $1::numeric AND $2::numeric ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: ["-50", "0.10", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."balance" BETWEEN $1::numeric AND $2::numeric
+  args: ["-50", "0.10"]
+
+# BETWEEN on a date field
+due BETWEEN ('2026-10-26', '2026-11-01')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."due" AS "due" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [time(2026-10-26T00:00:00Z), time(2026-11-01T00:00:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."due" BETWEEN $1 AND $2
+  args: [time(2026-10-26T00:00:00Z), time(2026-11-01T00:00:00Z)]
+
+# BETWEEN on a timestamp field with timestamps
+created_at BETWEEN ('2026-10-20T11:00:00Z', '2026-10-27T09:30:00Z')
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."created_at" AS "created_at" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."created_at" BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [time(2026-10-20T11:00:00Z), time(2026-10-27T09:30:00Z), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."created_at" BETWEEN $1 AND $2
+  args: [time(2026-10-20T11:00:00Z), time(2026-10-27T09:30:00Z)]
+
+# BETWEEN on a lateral field
+order_count BETWEEN (1, 2)
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", ord.order_count AS "order_count" FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.order_count) BETWEEN $1 AND $2 ORDER BY p."id" ASC LIMIT $3 OFFSET $4
+  args: [int64(1), int64(2), int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN LATERAL (
+  			SELECT count(*) AS order_count, max(o.placed_at) AS last_order_at FROM orders o WHERE o.person_id = p.id
+  		) ord ON TRUE WHERE (p.deleted_at IS NULL) AND (ord.order_count) BETWEEN $1 AND $2
+  args: [int64(1), int64(2)]

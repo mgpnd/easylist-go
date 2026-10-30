@@ -1,0 +1,25 @@
+{
+  "data": {
+    "people": {
+      "totalCount": 13,
+      "items": [
+        {
+          "name": "Eve Martin",
+          "country": "France"
+        },
+        {
+          "name": "Ann Lee",
+          "country": "France"
+        },
+        {
+          "name": "Kai Becker",
+          "country": "Germany"
+        },
+        {
+          "name": "Ivan Petrov",
+          "country": "Germany"
+        }
+      ]
+    }
+  }
+}
