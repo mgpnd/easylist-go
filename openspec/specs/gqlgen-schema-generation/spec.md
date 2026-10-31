@@ -38,6 +38,10 @@ Field types SHALL map to GraphQL as: text `String`, integer `Int64`, float `Floa
 - **WHEN** a numeric value `10.50` is returned
 - **THEN** the GraphQL response contains the string `"10.50"`
 
+#### Scenario: Timestamp field in UTC
+- **WHEN** timestamp SQL field `created_at` holds `2026-10-25 10:00:00+02` and the server's local time zone is UTC+03:00
+- **THEN** the GraphQL response contains the string `"2026-10-25T08:00:00Z"`, as it does for the same instant in a timestamp array field
+
 ### Requirement: List input
 For each list the plugin SHALL generate `<P>SortField` (one value per SQL field that is not an array, in upper snake case), `input <P>Sort { field: <P>SortField!, direction: SortDirection! = ASC }`, and `input <P>ListInput { filter: String, sort: [<P>Sort!], limit: Int, offset: Int, timezone: Int }`. `timezone` SHALL be documented in the SDL as the client's UTC offset in minutes, positive east of UTC.
 

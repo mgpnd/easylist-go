@@ -22,7 +22,7 @@ None.
 
 ### Modified Capabilities
 
-- `core-list-execution`: "Typed row values" states that SQL timestamp values are in UTC whatever zone the driver scans them in, and that dates and calculated values are not converted. "Array row values" makes the timestamp array scenario require UTC elements whatever the database session zone.
+- `core-list-execution`: a new requirement, "Timestamp values in UTC", states that SQL timestamp values, scalar or array element, are in UTC whatever zone the driver or database session gives them, and that dates and calculated values are not converted. "Array row values" says each timestamp element is in UTC, and its timestamp array scenario requires that whatever the database session zone.
 - `gqlgen-schema-generation`: "GraphQL type mapping" gains a scenario that a timestamp SQL field is written with a `Z` offset whatever the server's local zone.
 
 ## Impact

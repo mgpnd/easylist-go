@@ -32,6 +32,21 @@ Each returned row SHALL contain one value per planned SQL field, keyed by field 
 - **WHEN** an enum field returns a value that is not one of its declared values
 - **THEN** the request fails with an error naming the field and the value
 
+### Requirement: Timestamp values in UTC
+A timestamp value read from an SQL field, scalar or array element, SHALL be the database's instant in UTC, whatever zone the database handle or the database session renders it in. Date values and calculated field values SHALL NOT be converted.
+
+#### Scenario: Timestamp scanned in a local zone
+- **WHEN** timestamp field `created_at` holds `2026-10-25 10:00:00+02` and the database handle scans it as `2026-10-25T11:00:00+03:00`
+- **THEN** the row value is `2026-10-25T08:00:00Z` with location UTC
+
+#### Scenario: Date keeps its calendar day
+- **WHEN** date field `due` holds `2026-10-25` and the database handle scans it as midnight in UTC+03:00
+- **THEN** the row value is still on 2026-10-25
+
+#### Scenario: Calculated timestamp is not converted
+- **WHEN** calculated timestamp field `next_call` returns `2026-10-25T11:00:00+03:00`
+- **THEN** its value is `2026-10-25T11:00:00+03:00`, in the zone the function returned
+
 ### Requirement: Page result
 Running a list request SHALL return the page rows in plan order. The total count SHALL be computed with the count plan only when the caller asks for it, and the page query SHALL run only when the caller asks for rows.
 
@@ -62,7 +77,7 @@ Database errors SHALL be returned to the caller wrapped with the list name. The 
 - **THEN** the returned error names `users` and wraps the database error
 
 ### Requirement: Array row values
-An array field's row value SHALL be a Go slice of its element type's fixed representation, in the database's element order. A NULL array SHALL be an absent value, and an empty array SHALL be a present, empty slice.
+An array field's row value SHALL be a Go slice of its element type's fixed representation, in the database's element order. Each timestamp element SHALL be in UTC, as for scalar timestamp values. A NULL array SHALL be an absent value, and an empty array SHALL be a present, empty slice.
 
 #### Scenario: Text array value
 - **WHEN** text array field `tags` holds `{go,rust}` for a row
@@ -81,8 +96,8 @@ An array field's row value SHALL be a Go slice of its element type's fixed repre
 - **THEN** the row reports `tags` as absent
 
 #### Scenario: Timestamp array value
-- **WHEN** timestamp array field `seen_at` holds `{2026-10-25 10:00:00+02}`
-- **THEN** the row value holds the instant `2026-10-25T08:00:00Z`
+- **WHEN** timestamp array field `seen_at` holds `{2026-10-25 10:00:00+02}` and the database session's time zone is `Asia/Tokyo`
+- **THEN** the row value holds `2026-10-25T08:00:00Z` with location UTC
 
 ### Requirement: Array element validation
 Reading an array field SHALL fail the request with an error naming the field when an element is NULL or cannot be decoded as the element type. Every element of an enum array SHALL be a declared value, and the error for one that is not SHALL name the field and the value.
