@@ -51,6 +51,7 @@ func TestRowAccessors(t *testing.T) {
 }
 
 func TestStreamScansTypedValues(t *testing.T) {
+	plus3 := time.FixedZone("", 3*3600)
 	reg, err := NewRegistry(List{
 		Name: "all", Table: "t", Alias: "t", PrimaryKey: "id",
 		Fields: []Field{
@@ -59,20 +60,25 @@ func TestStreamScansTypedValues(t *testing.T) {
 			{Name: "dec", Type: Numeric}, {Name: "ok", Type: Boolean}, {Name: "day", Type: Date},
 			{Name: "at", Type: Timestamp}, {Name: "kind", Type: Enum, Values: []string{"a"}},
 			{Name: "opt", Type: Text, Nullable: true},
+			Calc("next_call", Timestamp, func(_ context.Context, r Row) (time.Time, error) {
+				at, _ := r.Time("at")
+				return at.In(plus3), nil
+			}, "at"),
 		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	l, _ := reg.List("all")
-	day := time.Date(2026, 10, 25, 0, 0, 0, 0, time.UTC)
-	at := time.Date(2026, 10, 25, 10, 0, 0, 0, time.UTC)
+	// The database handle scans dates and timestamps in a local zone.
+	day := time.Date(2026, 10, 25, 0, 0, 0, 0, plus3)
+	at := time.Date(2026, 10, 25, 8, 0, 0, 0, time.UTC)
 	db := &fakeDB{rows: map[string][][]any{"SELECT": {{
 		"0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b", "hi", int64(5), 2.5,
-		[]byte("12345678901234567890.123"), true, day, at, "a", nil,
+		[]byte("12345678901234567890.123"), true, day, at.In(plus3), "a", nil,
 	}}}}
 	rt := &Runtime{Driver: fakeDriver{}, DB: db}
-	fields := []string{"txt", "num", "flt", "dec", "ok", "day", "at", "kind", "opt"}
+	fields := []string{"txt", "num", "flt", "dec", "ok", "day", "at", "kind", "opt", "next_call"}
 	res, err := rt.Fetch(context.Background(), l, Request{Fields: fields}, Want{Rows: true})
 	if err != nil {
 		t.Fatal(err)
@@ -80,12 +86,22 @@ func TestStreamScansTypedValues(t *testing.T) {
 	r := res.Rows[0]
 	want := map[string]any{
 		"id": "0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b", "txt": "hi", "num": int64(5), "flt": 2.5,
-		"dec": "12345678901234567890.123", "ok": true, "day": day, "at": at, "kind": "a",
+		"dec": "12345678901234567890.123", "ok": true, "kind": "a",
 	}
 	for name, v := range want {
 		if got, ok := r.Value(name); !ok || got != v {
 			t.Errorf("%s = %#v, %v; want %#v", name, got, ok, v)
 		}
+	}
+	if got, ok := r.Time("at"); !ok || !got.Equal(at) || got.Location() != time.UTC {
+		t.Errorf("at = %v, %v; want %v in UTC", got, ok, at)
+	}
+	if got, ok := r.Time("day"); !ok || got.Format(time.DateOnly) != "2026-10-25" {
+		t.Errorf("day = %v, %v; want 2026-10-25", got, ok)
+	}
+	v, err := r.Calc(context.Background(), "next_call")
+	if got, _ := v.(time.Time); err != nil || !got.Equal(at) || got.Location() != plus3 {
+		t.Errorf("next_call = %v, %v; want %v, not converted", v, err, at.In(plus3))
 	}
 	if _, ok := r.Value("opt"); ok {
 		t.Error("NULL nullable field reported as present")

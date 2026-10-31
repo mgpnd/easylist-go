@@ -206,7 +206,6 @@ func TestArrayElementErrors(t *testing.T) {
 }
 
 func TestDecodeArrayElements(t *testing.T) {
-	plus2 := time.FixedZone("", 2*3600)
 	cases := []struct {
 		typ  Type
 		text string
@@ -221,7 +220,7 @@ func TestDecodeArrayElements(t *testing.T) {
 		{Boolean, `[true,false]`, []bool{true, false}},
 		{Date, `["2026-10-25","1999-01-01"]`, []time.Time{time.Date(2026, 10, 25, 0, 0, 0, 0, time.UTC), time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC)}},
 		{Timestamp, `["2026-10-25T10:00:00+02:00","2026-10-25T10:00:00.123456","2026-10-25T08:00:00Z"]`, []time.Time{
-			time.Date(2026, 10, 25, 10, 0, 0, 0, plus2),
+			time.Date(2026, 10, 25, 8, 0, 0, 0, time.UTC),
 			time.Date(2026, 10, 25, 10, 0, 0, 123456000, time.UTC),
 			time.Date(2026, 10, 25, 8, 0, 0, 0, time.UTC),
 		}},
@@ -272,8 +271,8 @@ func TestDecodeArrayElements(t *testing.T) {
 	}
 }
 
-// equalArrays compares decoded slices, treating times as instants with the
-// same offset and NaN as equal to itself.
+// equalArrays compares decoded slices, treating times as instants that must
+// be in UTC and NaN as equal to itself.
 func equalArrays(got, want any) bool {
 	if reflect.TypeOf(got) != reflect.TypeOf(want) {
 		return false
@@ -281,9 +280,7 @@ func equalArrays(got, want any) bool {
 	switch want := want.(type) {
 	case []time.Time:
 		return slices.EqualFunc(got.([]time.Time), want, func(a, b time.Time) bool {
-			_, ao := a.Zone()
-			_, bo := b.Zone()
-			return a.Equal(b) && ao == bo
+			return a.Equal(b) && a.Location() == time.UTC
 		})
 	case []float64:
 		return slices.EqualFunc(got.([]float64), want, func(a, b float64) bool {

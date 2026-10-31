@@ -110,11 +110,13 @@ func (e *recordingExporter) Export(_ context.Context, req easylist.ExportRequest
 
 var created = time.Date(2026, 10, 25, 10, 0, 0, 0, time.UTC)
 
+// sampleRows scans Ann's created_at in UTC+03:00, as a driver using the
+// server's local zone would; the response still carries it in UTC.
 func sampleRows() []map[string]any {
 	return []map[string]any{
 		{"id": int64(1), "uid": "0b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b", "name": "Ann", "age": int64(30), "score": 1.5,
 			"balance": "10.50", "active": true, "born": time.Date(1996, 2, 29, 0, 0, 0, 0, time.UTC),
-			"created_at": created, "status": "on_hold", "country": "FR"},
+			"created_at": created.In(time.FixedZone("", 3*3600)), "status": "on_hold", "country": "FR"},
 		{"id": int64(2), "uid": "1b6c4c1e-3d8e-4f43-9d5a-2a8a0d1d2c3b", "name": "Boom", "age": nil, "score": nil,
 			"balance": "12345678901234567890.123", "active": false, "born": nil,
 			"created_at": created, "status": "active", "country": nil},

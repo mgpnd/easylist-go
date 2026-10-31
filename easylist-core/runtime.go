@@ -162,6 +162,10 @@ func (rt *Runtime) Stream(ctx context.Context, l *CompiledList, p *Plan, fn func
 				}
 				continue
 			}
+			if f.Type == Timestamp && !f.Array {
+				// Drivers scan in different zones; the instant is what counts.
+				v = v.(time.Time).UTC()
+			}
 			if f.Array {
 				if v, err = decodeArray(f.Type, v.(string)); err != nil {
 					return fmt.Errorf("list %q: field %q: %w", l.def.Name, f.Name, err)
