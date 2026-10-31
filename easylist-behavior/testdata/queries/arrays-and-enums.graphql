@@ -1,0 +1,20 @@
+# Array and enum fields: plan is an enum, roles a non-null enum array, and
+# the rest nullable arrays of every element type. Dan holds every array
+# empty and Eve every nullable array NULL, so [] and null both show.
+query ArraysAndEnums {
+  people(query: {filter: "id IN (1, 4, 5, 8)"}) {
+    items {
+      name
+      plan
+      roles
+      tags
+      lucky_numbers
+      ratings
+      prices
+      answers
+      holidays
+      logins
+      friend_ids
+    }
+  }
+}

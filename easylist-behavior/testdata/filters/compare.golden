@@ -1,0 +1,140 @@
+# > on an integer field never matches NULL ages
+age > 30
+=> 7 rows
+  id | name        | age
+   1 | Ann Lee     |  34
+   2 | Bob Stone   |  41
+   4 | Dan O'Brien |  52
+   6 | Finn Larsen |  67
+   7 | Gil Moreau  |  38
+   8 | Hana Sato   |  45
+  12 | Lena Novak  |  61
+
+# >= includes the bound
+age >= 30
+=> 8 rows
+  id | name        | age
+   1 | Ann Lee     |  34
+   2 | Bob Stone   |  41
+   4 | Dan O'Brien |  52
+   6 | Finn Larsen |  67
+   7 | Gil Moreau  |  38
+   8 | Hana Sato   |  45
+  10 | Jade Wong   |  30
+  12 | Lena Novak  |  61
+
+# < with a signed negative number
+age < 0
+=> 1 row
+  id | name       | age
+  11 | Kai Becker |  -1
+
+# <= on an integer field
+age <= 17
+=> 2 rows
+  id | name        | age
+   9 | Ivan Petrov |  17
+  11 | Kai Becker  |  -1
+
+# = on an integer field
+age = 30
+=> 1 row
+  id | name      | age
+  10 | Jade Wong |  30
+
+# A quoted number on an integer field still compares numerically
+age > '60'
+=> 2 rows
+  id | name        | age
+   6 | Finn Larsen |  67
+  12 | Lena Novak  |  61
+
+# A quoted identifier names the same field
+"age" >= 61
+=> 2 rows
+  id | name        | age
+   6 | Finn Larsen |  67
+  12 | Lena Novak  |  61
+
+# > on a float field
+height > 1.8
+=> 2 rows
+  id | name        | height
+   2 | Bob Stone   |   1.82
+   6 | Finn Larsen |   1.91
+
+# <= on a float field, where 1.6 is stored as a double
+height <= 1.6
+=> 2 rows
+  id | name      | height
+   3 | Cara Diaz |    1.6
+   8 | Hana Sato |   1.58
+
+# > on a numeric field
+balance > 1000
+=> 3 rows
+  id | name       |  balance
+   1 | Ann Lee    |  1250.00
+   8 | Hana Sato  |  2200.10
+  12 | Lena Novak | 10000.00
+
+# Numeric equality ignores trailing zeros: 15 equals 15.00
+balance = '15.00'
+=> 1 row
+  id | name       | balance
+   5 | Eve Martin |      15
+
+# = on a boolean field
+active = FALSE
+=> 4 rows
+  id | name        | active
+   2 | Bob Stone   | false
+   6 | Finn Larsen | false
+  10 | Jade Wong   | false
+  12 | Lena Novak  | false
+
+# = on an enum field
+plan = 'team'
+=> 3 rows
+  id | name        | plan
+   3 | Cara Diaz   | team
+   6 | Finn Larsen | team
+   8 | Hana Sato   | team
+
+# = on a uuid field
+uid = '00000000-0000-4000-8000-000000000003'
+=> 1 row
+  id | name      | uid
+   3 | Cara Diaz | 00000000-0000-4000-8000-000000000003
+
+# > on a date field
+due > '2026-11-02'
+=> 3 rows
+  id | name        | due
+   7 | Gil Moreau  | 2026-12-31
+   9 | Ivan Petrov | 2026-11-03
+  11 | Kai Becker  | 2027-01-01
+
+# < on a timestamp field with an explicit offset
+created_at < '2024-01-01T00:00:00Z'
+=> 2 rows
+  id | name        | created_at
+   4 | Dan O'Brien | 2023-11-20T17:45:00Z
+   6 | Finn Larsen | 2022-07-04T10:00:00Z
+
+# A date string is not a timestamp; only relative dates cover a whole day
+created_at = '2026-10-27'
+=> error: invalid timestamp value "2026-10-27" for field "created_at" at position 14
+
+# A field from a lateral join
+order_count >= 3
+=> 2 rows
+  id | name      | order_count
+   1 | Ann Lee   |           3
+   8 | Hana Sato |           4
+
+# A timestamp from a lateral join
+last_order_at > '2026-10-27T09:00:00+00:00'
+=> 1 row
+  id | name       | last_order_at
+   5 | Eve Martin | 2026-10-27T09:50:00Z

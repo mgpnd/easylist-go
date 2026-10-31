@@ -1,0 +1,35 @@
+# AND requires both sides
+plan = 'pro' AND active = TRUE
+
+# OR accepts either side
+plan = 'pro' OR plan = 'team'
+
+# AND binds more tightly than OR
+plan = 'free' OR plan = 'pro' AND active = TRUE
+
+# Parentheses override precedence
+(plan = 'free' OR plan = 'pro') AND active = TRUE
+
+# Two groups joined by AND
+(country = 'Japan' OR country = 'Brazil') AND (age < 35 OR balance > 2000)
+
+# A chain of ANDs
+age > 20 AND age < 50 AND plan != 'free'
+
+# Neither TRUE nor FALSE: only NULL rows are left
+active != TRUE AND active != FALSE
+
+# Keywords are case-insensitive
+plan = 'team' and age > 50 or name = 'Mo Reyes'
+
+# The scope still hides the soft-deleted Nora behind an OR
+name = 'Nora Quinn' OR plan = 'pro'
+
+# Redundant parentheses
+((age > 60))
+
+# A joined field and a lateral field in one filter
+country = 'Japan' AND order_count > 0
+
+# OR across a NULL test and a comparison
+age > 60 OR country = NULL

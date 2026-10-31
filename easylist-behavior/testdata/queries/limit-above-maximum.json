@@ -1,0 +1,17 @@
+{
+  "errors": [
+    {
+      "message": "limit 20000 must be between 1 and the maximum page size 10000",
+      "path": [
+        "people"
+      ],
+      "locations": [
+        {
+          "line": 4,
+          "column": 3
+        }
+      ]
+    }
+  ],
+  "data": null
+}

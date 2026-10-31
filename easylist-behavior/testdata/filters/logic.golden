@@ -1,0 +1,107 @@
+# AND requires both sides
+plan = 'pro' AND active = TRUE
+=> 2 rows
+  id | name       | plan | active
+   1 | Ann Lee    | pro  | true
+   5 | Eve Martin | pro  | true
+
+# OR accepts either side
+plan = 'pro' OR plan = 'team'
+=> 7 rows
+  id | name        | plan
+   1 | Ann Lee     | pro
+   3 | Cara Diaz   | team
+   5 | Eve Martin  | pro
+   6 | Finn Larsen | team
+   8 | Hana Sato   | team
+  10 | Jade Wong   | pro
+  12 | Lena Novak  | pro
+
+# AND binds more tightly than OR
+plan = 'free' OR plan = 'pro' AND active = TRUE
+=> 8 rows
+  id | name        | plan | active
+   1 | Ann Lee     | pro  | true
+   2 | Bob Stone   | free | false
+   4 | Dan O'Brien | free | NULL
+   5 | Eve Martin  | pro  | true
+   7 | Gil Moreau  | free | NULL
+   9 | Ivan Petrov | free | true
+  11 | Kai Becker  | free | true
+  13 | Mo Reyes    | free | NULL
+
+# Parentheses override precedence
+(plan = 'free' OR plan = 'pro') AND active = TRUE
+=> 4 rows
+  id | name        | plan | active
+   1 | Ann Lee     | pro  | true
+   5 | Eve Martin  | pro  | true
+   9 | Ivan Petrov | free | true
+  11 | Kai Becker  | free | true
+
+# Two groups joined by AND
+(country = 'Japan' OR country = 'Brazil') AND (age < 35 OR balance > 2000)
+=> 4 rows
+  id | name       | country | age |  balance
+   3 | Cara Diaz  | Brazil  |  29 |   -35.50
+   8 | Hana Sato  | Japan   |  45 |  2200.10
+  10 | Jade Wong  | Japan   |  30 |    42.00
+  12 | Lena Novak | Brazil  |  61 | 10000.00
+
+# A chain of ANDs
+age > 20 AND age < 50 AND plan != 'free'
+=> 5 rows
+  id | name       | age | plan
+   1 | Ann Lee    |  34 | pro
+   3 | Cara Diaz  |  29 | team
+   5 | Eve Martin |  23 | pro
+   8 | Hana Sato  |  45 | team
+  10 | Jade Wong  |  30 | pro
+
+# Neither TRUE nor FALSE: only NULL rows are left
+active != TRUE AND active != FALSE
+=> 3 rows
+  id | name        | active
+   4 | Dan O'Brien | NULL
+   7 | Gil Moreau  | NULL
+  13 | Mo Reyes    | NULL
+
+# Keywords are case-insensitive
+plan = 'team' and age > 50 or name = 'Mo Reyes'
+=> 2 rows
+  id | name        | plan |  age
+   6 | Finn Larsen | team |   67
+  13 | Mo Reyes    | free | NULL
+
+# The scope still hides the soft-deleted Nora behind an OR
+name = 'Nora Quinn' OR plan = 'pro'
+=> 4 rows
+  id | name       | plan
+   1 | Ann Lee    | pro
+   5 | Eve Martin | pro
+  10 | Jade Wong  | pro
+  12 | Lena Novak | pro
+
+# Redundant parentheses
+((age > 60))
+=> 2 rows
+  id | name        | age
+   6 | Finn Larsen |  67
+  12 | Lena Novak  |  61
+
+# A joined field and a lateral field in one filter
+country = 'Japan' AND order_count > 0
+=> 3 rows
+  id | name      | country | order_count
+   2 | Bob Stone | Japan   |           1
+   8 | Hana Sato | Japan   |           4
+  10 | Jade Wong | Japan   |           1
+
+# OR across a NULL test and a comparison
+age > 60 OR country = NULL
+=> 4 rows
+  id | name        |  age | country
+   6 | Finn Larsen |   67 | Germany
+   7 | Gil Moreau  |   38 | NULL
+  12 | Lena Novak  |   61 | Brazil
+  13 | Mo Reyes    | NULL | NULL

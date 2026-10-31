@@ -1,0 +1,41 @@
+# = on text is exact
+name = 'Ann Lee'
+
+# = on text is case-sensitive
+name = 'ann lee'
+
+# != on a non-nullable text field
+name != 'Ann Lee'
+
+# CONTAINS on text is a case-insensitive substring match
+name CONTAINS 'AN'
+
+# EXCLUDES on text is its negation
+name EXCLUDES 'a'
+
+# A doubled quote is one quote
+name = 'Dan O''Brien'
+
+# CONTAINS finds a quote
+name CONTAINS ''''
+
+# LIKE wildcards are matched literally
+name CONTAINS '%'
+
+# ... and so is the underscore
+name CONTAINS '_'
+
+# A comma in scalar CONTAINS is literal; it does not split
+name CONTAINS 'a,b'
+
+# CONTAINS never matches NULL nicknames
+nickname CONTAINS 'e'
+
+# CONTAINS on a joined field
+country CONTAINS 'an'
+
+# = on a second joined field from the same join
+country_code = 'JP'
+
+# A leading space is kept, so nothing matches
+nickname = ' Hana'

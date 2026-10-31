@@ -1,0 +1,71 @@
+# Missing value
+age >
+
+# Dangling AND
+age > 30 AND
+
+# A comma outside a list
+age = 1, name = 'x'
+
+# Unknown field
+nope = 1
+
+# Calculated fields cannot be filtered on
+display = 'Ann Lee'
+
+# > is not supported on a boolean field
+active > TRUE
+
+# CONTAINS is not supported on an enum field
+plan CONTAINS 'pr'
+
+# IN is rejected on arrays
+tags IN ('go')
+
+# Scalar text rejects a list after CONTAINS
+name CONTAINS ('a', 'b')
+
+# An undeclared enum value
+plan = 'gold'
+
+# A malformed uuid
+uid = 'not-a-uuid'
+
+# A timestamp needs an offset
+created_at > '2026-10-27T10:00:00'
+
+# An impossible date
+due = '2026-02-30'
+
+# An integer field rejects a decimal
+age = 30.5
+
+# A quoted number is not trimmed
+age = ' 30'
+
+# A boolean field needs TRUE or FALSE, not a string
+active = 'true'
+
+# NULL only goes with = and !=
+age > NULL
+
+# A time keyword on a text field
+name = TODAY
+
+# An unknown word on the value side
+due = tomorrow
+
+# The quoted BETWEEN form needs a comma
+age BETWEEN '30'
+
+# BETWEEN is not supported on text
+name BETWEEN ('a', 'b')
+
+# An empty item in an array's quoted list
+tags CONTAINS 'go,,sql'
+
+# CONTAINS takes no relative value, on any field
+holidays CONTAINS TODAY
+
+# Quoted identifiers keep their case
+"Age" > 30

@@ -23,6 +23,7 @@ The repository is a Go workspace (`go.work`) of independent modules. Each module
 | [easylist-sql-jet](easylist-sql-jet) | `sqljet` | PostgreSQL driver built on [jet](https://github.com/go-jet/jet). |
 | [easylist-gqlgen](easylist-gqlgen) | `easylistgql` | [gqlgen](https://gqlgen.com) plugin that generates GraphQL types and one-call resolvers for every list. |
 | [easylist-export](easylist-export) | `easylistexport` | Writes an export request to CSV or XLSX, for an application's export worker. |
+| [easylist-behavior](easylist-behavior) | `behavior` | Test only; nothing imports it. Behaviour snapshots: list definitions, filters, and GraphQL requests run against a seeded PostgreSQL, with readable outcome files, so a diff shows every behaviour change. |
 
 Other directories:
 
@@ -51,6 +52,7 @@ Dependencies point one way, from the edges toward `easylist-filter`:
 - **easylist-sqlpg** is PostgreSQL-specific and lives above core. `sqlpg.Lower(plan)` makes every decision that depends on the plan (types, operators, NULL handling, casts, whole-day ranges) and returns a `sqlpg.Query`.
 - **Drivers** only map a `sqlpg.Query` onto their library's builder. They contain no type or NULL logic, and the conformance suite checks that all of them bind the same arguments, return the same errors, and match the same rows. Each driver package links its own query library and nothing else, which `TestCompiledInPackages` checks.
 - **easylist-gqlgen** and **easylist-export** are integrations over core. They depend on no driver: the application passes a `Runtime` that already holds one.
+- **easylist-behavior** is a test-only leaf outside the diagram. It uses `easylist-filter`, core, `easylist-sqlpg`, `easylist-sql-gorm`, and `easylist-gqlgen` to record behaviour snapshots, and nothing depends on it.
 
 The practical rules that follow:
 
@@ -204,10 +206,17 @@ go vet $(go list -m -f '{{.Dir}}/...')
 go test -race $(go list -m -f '{{.Dir}}/...')
 ```
 
-The root has no `go.mod`, so `go test ./...` from here matches nothing. The driver tests also run the shared conformance suite; its live cases need PostgreSQL 16 and `EASYLIST_PG_DSN`, as described in [easylist-sqlpg's README](easylist-sqlpg/README.md#start-a-local-postgresql):
+The root has no `go.mod`, so `go test ./...` from here matches nothing. The driver tests also run the shared conformance suite, and `easylist-behavior` runs behaviour snapshots. The suite's live cases and the snapshots need PostgreSQL 16 and `EASYLIST_PG_DSN`. Start a database with Docker Compose, or as described in [easylist-sqlpg's README](easylist-sqlpg/README.md#start-a-local-postgresql), then run the tests against it:
 
 ```sh
+docker compose -f easylist-behavior/compose.yml up -d --wait
 EASYLIST_PG_DSN='postgres://postgres@127.0.0.1:54329/postgres?sslmode=disable' go test -race $(go list -m -f '{{.Dir}}/...')
+```
+
+Stop it with `docker compose -f easylist-behavior/compose.yml down`. When a change alters behaviour on purpose, refresh the snapshot outcome files and commit their diff with the change. [easylist-behavior's README](easylist-behavior/README.md) explains how to add fixtures and how to review the diff:
+
+```sh
+EASYLIST_PG_DSN='postgres://postgres@127.0.0.1:54329/postgres?sslmode=disable' go test ./easylist-behavior -update
 ```
 
 Module READMEs keep their Go snippets in `readme_example_test.go`, where a test checks that they compile and match. Changes are planned as [OpenSpec](openspec) proposals before they are implemented.

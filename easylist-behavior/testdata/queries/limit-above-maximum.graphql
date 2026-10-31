@@ -1,0 +1,9 @@
+# A limit above the list's maximum page size, 10000, fails the list field
+# with an error stating the maximum.
+query LimitAboveMaximum {
+  people(query: {limit: 20000}) {
+    items {
+      name
+    }
+  }
+}

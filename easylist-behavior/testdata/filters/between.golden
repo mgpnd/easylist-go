@@ -1,0 +1,82 @@
+# BETWEEN with a list includes both bounds
+age BETWEEN (30, 40)
+=> 3 rows
+  id | name       | age
+   1 | Ann Lee    |  34
+   7 | Gil Moreau |  38
+  10 | Jade Wong  |  30
+
+# BETWEEN with a quoted string
+age BETWEEN '30,40'
+=> 3 rows
+  id | name       | age
+   1 | Ann Lee    |  34
+   7 | Gil Moreau |  38
+  10 | Jade Wong  |  30
+
+# The quoted form trims its bounds
+age BETWEEN ' 30 , 40 '
+=> 3 rows
+  id | name       | age
+   1 | Ann Lee    |  34
+   7 | Gil Moreau |  38
+  10 | Jade Wong  |  30
+
+# List bounds may be quoted numbers on a number field
+age BETWEEN ('30', '40')
+=> 3 rows
+  id | name       | age
+   1 | Ann Lee    |  34
+   7 | Gil Moreau |  38
+  10 | Jade Wong  |  30
+
+# Bounds in the wrong order match nothing
+age BETWEEN (40, 30)
+=> 0 rows
+
+# BETWEEN on a float field
+height BETWEEN (1.6, 1.7)
+=> 4 rows
+  id | name       | height
+   1 | Ann Lee    |   1.68
+   3 | Cara Diaz  |    1.6
+   7 | Gil Moreau |    1.7
+  10 | Jade Wong  |   1.65
+
+# BETWEEN on a numeric field with a negative bound
+balance BETWEEN '-50,0.10'
+=> 3 rows
+  id | name       | balance
+   2 | Bob Stone  |    0.00
+   3 | Cara Diaz  |  -35.50
+  11 | Kai Becker |    0.10
+
+# BETWEEN on a date field
+due BETWEEN ('2026-10-26', '2026-11-01')
+=> 5 rows
+  id | name       | due
+   1 | Ann Lee    | 2026-10-27
+   2 | Bob Stone  | 2026-10-26
+   3 | Cara Diaz  | 2026-11-01
+   5 | Eve Martin | 2026-10-31
+   8 | Hana Sato  | 2026-10-30
+
+# BETWEEN on a timestamp field with timestamps
+created_at BETWEEN ('2026-10-20T11:00:00Z', '2026-10-27T09:30:00Z')
+=> 2 rows
+  id | name       | created_at
+  11 | Kai Becker | 2026-10-20T11:00:00Z
+  12 | Lena Novak | 2026-10-27T09:30:00Z
+
+# Date strings are not timestamps, in BETWEEN either
+created_at BETWEEN '2026-10-20,2026-10-27'
+=> error: invalid timestamp value "2026-10-20" for field "created_at" at position 20
+
+# BETWEEN on a lateral field
+order_count BETWEEN (1, 2)
+=> 4 rows
+  id | name       | order_count
+   2 | Bob Stone  |           1
+   3 | Cara Diaz  |           2
+   5 | Eve Martin |           1
+  10 | Jade Wong  |           1

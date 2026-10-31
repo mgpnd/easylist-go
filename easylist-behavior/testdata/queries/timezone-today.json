@@ -1,0 +1,48 @@
+{
+  "data": {
+    "dueTodayUTC": {
+      "items": [
+        {
+          "name": "Ann Lee",
+          "due": "2026-10-27"
+        }
+      ]
+    },
+    "dueTodayUTCMinus12": {
+      "items": [
+        {
+          "name": "Bob Stone",
+          "due": "2026-10-26"
+        }
+      ]
+    },
+    "seenTodayUTC": {
+      "items": [
+        {
+          "name": "Ann Lee",
+          "last_seen": "2026-10-27T10:00:00Z"
+        },
+        {
+          "name": "Bob Stone",
+          "last_seen": "2026-10-27T09:45:00Z"
+        },
+        {
+          "name": "Cara Diaz",
+          "last_seen": "2026-10-27T08:30:00Z"
+        },
+        {
+          "name": "Dan O'Brien",
+          "last_seen": "2026-10-27T00:00:00Z"
+        }
+      ]
+    },
+    "seenTodayUTCPlus14": {
+      "items": [
+        {
+          "name": "Ann Lee",
+          "last_seen": "2026-10-27T10:00:00Z"
+        }
+      ]
+    }
+  }
+}

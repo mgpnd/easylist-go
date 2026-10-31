@@ -1,0 +1,125 @@
+# = on text is exact
+name = 'Ann Lee'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["Ann Lee", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" = $1
+  args: ["Ann Lee"]
+
+# = on text is case-sensitive
+name = 'ann lee'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["ann lee", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" = $1
+  args: ["ann lee"]
+
+# != on a non-nullable text field
+name != 'Ann Lee'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" IS DISTINCT FROM $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["Ann Lee", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" IS DISTINCT FROM $1
+  args: ["Ann Lee"]
+
+# CONTAINS on text is a case-insensitive substring match
+name CONTAINS 'AN'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\' ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%AN%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\'
+  args: ["%AN%"]
+
+# EXCLUDES on text is its negation
+name EXCLUDES 'a'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."name" NOT ILIKE $1 ESCAPE E'\\', TRUE) ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%a%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND COALESCE(p."name" NOT ILIKE $1 ESCAPE E'\\', TRUE)
+  args: ["%a%"]
+
+# A doubled quote is one quote
+name = 'Dan O''Brien'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["Dan O'Brien", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" = $1
+  args: ["Dan O'Brien"]
+
+# CONTAINS finds a quote
+name CONTAINS ''''
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\' ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%'%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\'
+  args: ["%'%"]
+
+# LIKE wildcards are matched literally
+name CONTAINS '%'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\' ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%\\%%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\'
+  args: ["%\\%%"]
+
+# ... and so is the underscore
+name CONTAINS '_'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\' ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%\\_%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\'
+  args: ["%\\_%"]
+
+# A comma in scalar CONTAINS is literal; it does not split
+name CONTAINS 'a,b'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\' ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%a,b%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."name" ILIKE $1 ESCAPE E'\\'
+  args: ["%a,b%"]
+
+# CONTAINS never matches NULL nicknames
+nickname CONTAINS 'e'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."nickname" AS "nickname" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" ILIKE $1 ESCAPE E'\\' ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%e%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" ILIKE $1 ESCAPE E'\\'
+  args: ["%e%"]
+
+# CONTAINS on a joined field
+country CONTAINS 'an'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.name AS "country" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) ILIKE $1 ESCAPE E'\\' ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["%an%", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.name) ILIKE $1 ESCAPE E'\\'
+  args: ["%an%"]
+
+# = on a second joined field from the same join
+country_code = 'JP'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", c.code AS "country_code" FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.code) = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: ["JP", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p LEFT JOIN countries c ON c.id = p.country_id WHERE (p.deleted_at IS NULL) AND (c.code) = $1
+  args: ["JP"]
+
+# A leading space is kept, so nothing matches
+nickname = ' Hana'
+=> page
+  SELECT p."id" AS "id", p."name" AS "name", p."nickname" AS "nickname" FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" = $1 ORDER BY p."id" ASC LIMIT $2 OFFSET $3
+  args: [" Hana", int64(10000), int64(0)]
+=> count
+  SELECT COUNT(*) FROM people AS p WHERE (p.deleted_at IS NULL) AND p."nickname" = $1
+  args: [" Hana"]

@@ -1,0 +1,30 @@
+# The timezone argument moves TODAY. At the reference time, Tuesday
+# 2026-10-27 10:00 UTC, the date is 2026-10-26 in UTC-12 (-720) and
+# 2026-10-28 in UTC+14 (840). Without timezone the runtime clock's zone,
+# UTC, applies.
+query TimezoneToday {
+  dueTodayUTC: people(query: {filter: "due = TODAY"}) {
+    items {
+      name
+      due
+    }
+  }
+  dueTodayUTCMinus12: people(query: {filter: "due = TODAY", timezone: -720}) {
+    items {
+      name
+      due
+    }
+  }
+  seenTodayUTC: people(query: {filter: "last_seen >= TODAY"}) {
+    items {
+      name
+      last_seen
+    }
+  }
+  seenTodayUTCPlus14: people(query: {filter: "last_seen >= TODAY", timezone: 840}) {
+    items {
+      name
+      last_seen
+    }
+  }
+}

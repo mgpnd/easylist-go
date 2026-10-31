@@ -1,0 +1,136 @@
+# = NULL matches rows where the field is NULL
+nickname = NULL
+=> 7 rows
+  id | name        | nickname
+   2 | Bob Stone   | NULL
+   4 | Dan O'Brien | NULL
+   6 | Finn Larsen | NULL
+   7 | Gil Moreau  | NULL
+   9 | Ivan Petrov | NULL
+  11 | Kai Becker  | NULL
+  13 | Mo Reyes    | NULL
+
+# != NULL matches the rest
+nickname != NULL
+=> 6 rows
+  id | name       | nickname
+   1 | Ann Lee    | Annie
+   3 | Cara Diaz  | Cee
+   5 | Eve Martin | Evie
+   8 | Hana Sato  | Hana
+  10 | Jade Wong  | JW
+  12 | Lena Novak | Len
+
+# != keeps NULL rows
+active != TRUE
+=> 7 rows
+  id | name        | active
+   2 | Bob Stone   | false
+   4 | Dan O'Brien | NULL
+   6 | Finn Larsen | false
+   7 | Gil Moreau  | NULL
+  10 | Jade Wong   | false
+  12 | Lena Novak  | false
+  13 | Mo Reyes    | NULL
+
+# = never matches NULL rows
+active = FALSE
+=> 4 rows
+  id | name        | active
+   2 | Bob Stone   | false
+   6 | Finn Larsen | false
+  10 | Jade Wong   | false
+  12 | Lena Novak  | false
+
+# > never matches NULL rows, and age is NULL only for Mo
+age > 0
+=> 11 rows
+  id | name        | age
+   1 | Ann Lee     |  34
+   2 | Bob Stone   |  41
+   3 | Cara Diaz   |  29
+   4 | Dan O'Brien |  52
+   5 | Eve Martin  |  23
+   6 | Finn Larsen |  67
+   7 | Gil Moreau  |  38
+   8 | Hana Sato   |  45
+   9 | Ivan Petrov |  17
+  10 | Jade Wong   |  30
+  12 | Lena Novak  |  61
+
+# != on a joined field keeps rows with no country
+country != 'France'
+=> 11 rows
+  id | name        | country
+   2 | Bob Stone   | Japan
+   3 | Cara Diaz   | Brazil
+   4 | Dan O'Brien | Germany
+   6 | Finn Larsen | Germany
+   7 | Gil Moreau  | NULL
+   8 | Hana Sato   | Japan
+   9 | Ivan Petrov | Germany
+  10 | Jade Wong   | Japan
+  11 | Kai Becker  | Germany
+  12 | Lena Novak  | Brazil
+  13 | Mo Reyes    | NULL
+
+# ... unless NULLs are excluded explicitly
+country != 'France' AND country != NULL
+=> 9 rows
+  id | name        | country
+   2 | Bob Stone   | Japan
+   3 | Cara Diaz   | Brazil
+   4 | Dan O'Brien | Germany
+   6 | Finn Larsen | Germany
+   8 | Hana Sato   | Japan
+   9 | Ivan Petrov | Germany
+  10 | Jade Wong   | Japan
+  11 | Kai Becker  | Germany
+  12 | Lena Novak  | Brazil
+
+# = NULL on a joined field: no country
+country = NULL
+=> 2 rows
+  id | name       | country
+   7 | Gil Moreau | NULL
+  13 | Mo Reyes   | NULL
+
+# A lateral field is NULL when the person has no order
+last_order_at = NULL
+=> 7 rows
+  id | name        | last_order_at
+   4 | Dan O'Brien | NULL
+   6 | Finn Larsen | NULL
+   7 | Gil Moreau  | NULL
+   9 | Ivan Petrov | NULL
+  11 | Kai Becker  | NULL
+  12 | Lena Novak  | NULL
+  13 | Mo Reyes    | NULL
+
+# The aggregate count is never NULL
+order_count = NULL
+=> 0 rows
+
+# = NULL on a field that is not nullable is accepted and matches nothing
+name = NULL
+=> 0 rows
+
+# EXCLUDES on scalar text matches NULL rows too
+nickname EXCLUDES 'e'
+=> 9 rows
+  id | name        | nickname
+   2 | Bob Stone   | NULL
+   4 | Dan O'Brien | NULL
+   6 | Finn Larsen | NULL
+   7 | Gil Moreau  | NULL
+   8 | Hana Sato   | Hana
+   9 | Ivan Petrov | NULL
+  10 | Jade Wong   | JW
+  11 | Kai Becker  | NULL
+  13 | Mo Reyes    | NULL
+
+# The keyword NULL is case-insensitive
+due = null
+=> 1 row
+  id | name     | due
+  13 | Mo Reyes | NULL

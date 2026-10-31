@@ -1,0 +1,33 @@
+{
+  "data": {
+    "germans": {
+      "total": 4,
+      "items": [
+        {
+          "__typename": "PeopleRow",
+          "fullName": "Dan O'Brien",
+          "nickname": null,
+          "years": 52
+        },
+        {
+          "__typename": "PeopleRow",
+          "fullName": "Finn Larsen",
+          "nickname": null,
+          "years": 67
+        },
+        {
+          "__typename": "PeopleRow",
+          "fullName": "Ivan Petrov",
+          "nickname": null,
+          "years": 17
+        },
+        {
+          "__typename": "PeopleRow",
+          "fullName": "Kai Becker",
+          "nickname": null,
+          "years": -1
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+# CONTAINS on a text array is exact and case-sensitive
+tags CONTAINS 'go'
+
+# ... so 'Go' matches only Bob
+tags CONTAINS 'Go'
+
+# On an array, a quoted string is a list of required elements
+tags CONTAINS 'go, sql'
+
+# The list form requires every item too
+tags CONTAINS ('go', 'sql')
+
+# List items are never split, so this needs an element "go,sql"
+tags CONTAINS ('go,sql')
+
+# EXCLUDES matches empty and NULL arrays
+tags EXCLUDES 'go'
+
+# EXCLUDES with a list leaves out rows holding any item
+tags EXCLUDES ('go', 'python')
+
+# = NULL tests the array itself; an empty array is not NULL
+tags = NULL
+
+# != NULL keeps empty arrays
+lucky_numbers != NULL
+
+# An integer array with a single number
+lucky_numbers CONTAINS 7
+
+# An integer array with a quoted list
+lucky_numbers CONTAINS '1, 3'
+
+# A float array
+ratings CONTAINS 4.5
+
+# A numeric array compares numerically: 5 matches 5.00
+prices CONTAINS 5
+
+# A numeric array with a quoted value
+prices CONTAINS '19.9'
+
+# A boolean array
+answers CONTAINS FALSE
+
+# A boolean array with EXCLUDES
+answers EXCLUDES FALSE
+
+# A date array
+holidays CONTAINS '2026-12-24'
+
+# A timestamp array compares instants across offsets
+logins CONTAINS '2026-10-27T12:00:00+02:00'
+
+# A uuid array
+friend_ids CONTAINS '00000000-0000-4000-8000-000000000001'
+
+# An enum array
+roles CONTAINS 'admin'
+
+# An enum array with EXCLUDES and a list
+roles EXCLUDES ('admin', 'editor')
+
+# A non-nullable array is never NULL
+roles = NULL

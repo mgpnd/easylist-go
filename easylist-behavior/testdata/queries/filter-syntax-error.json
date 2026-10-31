@@ -1,0 +1,17 @@
+{
+  "errors": [
+    {
+      "message": "invalid filter: unexpected end of input, expected field or '(' at position 13",
+      "path": [
+        "people"
+      ],
+      "locations": [
+        {
+          "line": 5,
+          "column": 3
+        }
+      ]
+    }
+  ],
+  "data": null
+}

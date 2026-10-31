@@ -1,0 +1,41 @@
+# IN on an enum field
+plan IN ('pro', 'team')
+
+# NOT IN on an enum field
+plan NOT IN ('free')
+
+# IN on a joined field
+country IN ('France', 'Japan')
+
+# NOT IN keeps rows where the field is NULL
+country NOT IN ('France', 'Germany')
+
+# ... unless the list holds NULL
+country NOT IN ('France', NULL)
+
+# A NULL item in IN matches NULL rows
+country IN ('Brazil', NULL)
+
+# IN on an integer field, quoted and unquoted numbers mixed
+age IN (17, '30', 99)
+
+# NOT IN on a float field keeps NULL heights
+height NOT IN (1.6, 1.8)
+
+# IN on a boolean field with NULL
+active IN (TRUE, NULL)
+
+# IN on a uuid field
+uid IN ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000013')
+
+# IN on a date field
+due IN ('2026-10-27', '2026-10-30')
+
+# IN on a timestamp field compares instants
+created_at IN ('2026-10-27T09:30:00Z', '2026-10-20T13:00:00+02:00')
+
+# IN on text is exact and case-sensitive
+name IN ('Ann Lee', 'bob stone')
+
+# not in, in lower case
+plan not in ('free', 'pro')

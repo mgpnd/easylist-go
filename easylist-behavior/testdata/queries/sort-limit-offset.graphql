@@ -1,0 +1,14 @@
+# Sorting on two fields, the joined country ascending and then name
+# descending within a country, and a page of 4 rows after skipping 2. The
+# order is Lena, Cara (Brazil), Eve, Ann (France), Kai, Ivan, Finn, Dan
+# (Germany), ..., so the page starts at Eve. totalCount ignores limit and
+# offset.
+query SortLimitOffset {
+  people(query: {sort: [{field: COUNTRY}, {field: NAME, direction: DESC}], limit: 4, offset: 2}) {
+    totalCount
+    items {
+      name
+      country
+    }
+  }
+}
