@@ -83,6 +83,8 @@ Each join must return at most one row per base row. Use a `LEFT JOIN` on a uniqu
 | `UUID` | `string` | `=`, `!=`, `IN`, `NOT IN` |
 | `Enum` | `string` (a declared value) | `=`, `!=`, `IN`, `NOT IN` |
 
+Timestamp values read from the database are returned in UTC, whatever zone the database handle scans them in. The instant is unchanged. Dates and calculated values are not converted. Callers that want local times call `In(loc)` on the value.
+
 Every type also accepts `= NULL` and `!= NULL`, whether or not the field is declared `Nullable`.
 
 Integer, float, and numeric fields also accept a quoted number and convert it exactly like the unquoted one, so `age > '30'` is `age > 30` and still compares numerically. The quoted text is not trimmed, so on an integer field `'30.0'` and `' 30'` fail just as `30.0` would. Other types keep their literal kinds: a boolean field still needs `TRUE` or `FALSE`, and `active = 'true'` fails.
@@ -118,7 +120,7 @@ Array fields cannot be the primary key or be sorted on. They accept only these f
 
 On an array field a quoted string is also a comma-separated list. Items are trimmed, an empty item is an error, and each item is converted to the element type, so `ids CONTAINS '7, 8'` is the same as `ids CONTAINS (7, 8)`. A single unquoted number or boolean, as in `ids CONTAINS 7`, is one value. Scalar text fields keep their substring `CONTAINS` and `EXCLUDES`, with no list splitting, and reject a parenthesized list. `IN` and `NOT IN` are rejected on arrays.
 
-Drivers learn which fields are arrays from `PlanField.Array`. They select each array as JSON array text, or SQL NULL for a NULL array, and the runtime decodes it with `encoding/json`. Elements are JSON strings for text, enum, uuid, dates (`YYYY-MM-DD`), and timestamps (ISO 8601, read as UTC when there is no offset); numbers for integer, float, and numeric; and booleans for boolean. Float elements may also be the strings `NaN`, `Infinity`, and `-Infinity`, and numeric elements the string `NaN`.
+Drivers learn which fields are arrays from `PlanField.Array`. They select each array as JSON array text, or SQL NULL for a NULL array, and the runtime decodes it with `encoding/json`. Elements are JSON strings for text, enum, uuid, dates (`YYYY-MM-DD`), and timestamps (ISO 8601, read as UTC when there is no offset, and every element is returned in UTC); numbers for integer, float, and numeric; and booleans for boolean. Float elements may also be the strings `NaN`, `Infinity`, and `-Infinity`, and numeric elements the string `NaN`.
 
 ## Drivers
 

@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// Timestamp layouts accepted in array JSON. A timestamp without an offset
-// is read as UTC, as drivers return scalar timestamp values.
+// Timestamp layouts accepted in array JSON. Elements are returned in UTC,
+// like scalar timestamp values, and one without an offset is read as UTC.
 var timestampLayouts = []string{
 	time.RFC3339Nano,
 	"2006-01-02T15:04:05.999999999Z07",
@@ -96,7 +96,7 @@ func decodeArray(t Type, text string) (any, error) {
 			s, _ := e.(string)
 			for _, layout := range timestampLayouts {
 				if v, err := time.Parse(layout, s); err == nil {
-					return v, true
+					return v.UTC(), true
 				}
 			}
 			return time.Time{}, false

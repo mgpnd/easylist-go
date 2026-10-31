@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/stdlib"
 
 	behavior "github.com/mgpnd/easylist-go/easylist-behavior"
@@ -106,15 +105,10 @@ func createFixture(dsn string) (*sql.DB, string, error) {
 	}
 	schema := "easylist_behavior_" + hex.EncodeToString(suffix[:])
 	cfg.RuntimeParams["search_path"] = schema
+	// Row values come back in UTC anyway; the session zone fixes how the
+	// database evaluates zone-dependent SQL, such as casts and date_trunc.
 	cfg.RuntimeParams["timezone"] = "UTC"
-	// pgx scans timestamptz into time.Local by default, so outcomes would
-	// depend on the machine's time zone. Scan them in UTC instead.
-	db := stdlib.OpenDB(*cfg, stdlib.OptionAfterConnect(func(_ context.Context, conn *pgx.Conn) error {
-		conn.TypeMap().RegisterType(&pgtype.Type{
-			Name: "timestamptz", OID: pgtype.TimestamptzOID, Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC},
-		})
-		return nil
-	}))
+	db := stdlib.OpenDB(*cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
